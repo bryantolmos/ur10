@@ -1,0 +1,31 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: ur10_description
+    relative_path: urdf/robots/custom_ur10.urdf.xacro
+  srdf:
+    relative_path: config/ur10_with_custom_ee.srdf
+  package_settings:
+    author_name: bryant olmos
+    author_email: olmosbryant29@gmail.com
+    generated_timestamp: 1758181772
+  control_xacro:
+    command:
+      - position
+      - velocity
+      - effort
+    state:
+      - position
+      - velocity
+      - effort
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+      - velocity
+      - effort
+    state:
+      - position
+      - velocity
+      - effort
