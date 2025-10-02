@@ -11,7 +11,7 @@ find_package(urdf_tutorial REQUIRED)
 
 # copy the necessary files to designated locations in project
 install(
-  DIRECTORY launch meshes urdf rviz
+  DIRECTORY meshes urdf
   DESTINATION share/${PROJECT_NAME}
 )
 
