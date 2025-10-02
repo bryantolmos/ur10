@@ -59,4 +59,10 @@ def main(args=None):
 if __name__ == '__main__':
     main()
 
-#%
+#Test line for commit test
+
+# Test using these in bash
+#ros2 lifecycle set /simple_lifecycle_node configure
+#ros2 lifecycle set /simple_lifecycle_node activate
+#ros2 lifecycle set /simple_lifecycle_node deactivate
+#ros2 lifecycle set /simple_lifecycle_node shutdown
