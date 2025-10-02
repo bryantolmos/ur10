@@ -3,7 +3,8 @@
     <xacro:macro name="ur10_gazebo_ros2_control_plugin" params="use_gazebo">
         <xacro:if value="${use_gazebo}">
             <gazebo>
-                <plugin filename="gz_ros2_control/GazeboSimROS2ControlPlugin" name="gz_ros2_control">
+                <plugin filename="libgz_ros2_control-system.so" 
+                        name="gz_ros2_control::GazeboSimROS2ControlPlugin">
                     <parameters>$(find ur10_moveit_config)/config/ros2_controllers.yaml</parameters>
                 </plugin>
             </gazebo>
