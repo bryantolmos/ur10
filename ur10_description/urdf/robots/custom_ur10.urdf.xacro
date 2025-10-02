@@ -1,12 +1,13 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="ur10_with_custom_ee">
 
+  <xacro:arg name="use_gazebo" default="false" />
+
   <link name="world"/>
 
   <xacro:property name="robot_prefix" value="" />
 
   <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro" />
-  
   <xacro:ur_robot
     name="ur10"
     tf_prefix="${robot_prefix}"
@@ -24,7 +25,15 @@
   </xacro:ur_robot>
 
   <xacro:include filename="$(find ur10_description)/urdf/mech/end_effector.urdf.xacro" />
-  
   <xacro:end_effector parent_link_name="${robot_prefix}tool0" prefix="custom_"/>
 
-</robot>
+  <xacro:include filename="$(find ur10_description)/urdf/ur10.gazebo.xacro" />
+  <xacro:ur10_gazebo_ros2_control_plugin use_gazebo="$(arg use_gazebo)" />
+
+  <xacro:include filename="$(find ur10_moveit_config)/config/ur10_with_custom_ee.ros2_control.xacro" />
+  <xacro:ur10_with_custom_ee_ros2_control
+      name="UR10"
+      initial_positions_file="$(find ur10_moveit_config)/config/initial_positions.yaml"
+      use_gazebo="$(arg use_gazebo)"
+      />
+  </robot>
