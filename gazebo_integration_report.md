@@ -1,67 +1,66 @@
-# Comprehensive Report on UR10 Gazebo Integration Debugging (ROS 2 Jazzy)
+# Comprehensive Report on UR10 Gazebo Integration (ROS 2 Jazzy)
 
 **Contributors:** Bryant Olmos
-**Date:** 2025-10-01 & 2025-10-02
+**Date:** 2025-10-02
 **Packages:** `ur10_moveit_config`, `ur10_description`
-**Status:** **Blocked by System-Level Installation Issue**
+**Status:** **Functional Bringup**
 
 ---
 
 ## I. Report Objective
 
-This document provides a detailed documentation of the troubleshooting process to integrate our UR10 MoveIt configuration with the Gazebo simulator for physics-based control. The objective was to launch the robot in a simulated environment and control it via MoveIt, utilizing the `gz_ros2_control` framework on ROS 2 Jazzy. While all configuration files were successfully debugged and corrected, the final execution is blocked by a persistent system-level error.
+This document provides a detailed documentation of the troubleshooting steps, issues identified, and corrections implemented to successfully integrate our UR10 MoveIt configuration with the Gazebo simulator for physics-based control. The objective has been achieved, and the system is successfully gets initialized  on ROS 2 Jazzy, utilizing the `gz_ros2_control` framework.
 
 ---
 
 ## II. Workflow and Resolution Summary
 
-The primary workflow involved creating a dedicated launch script (`launch_sim.sh`) to ensure a clean and repeatable environment. This script sourced the required ROS and workspace `setup.bash` files, exported necessary Gazebo environment variables, and then executed the main ROS 2 launch file.
+The final, stable workflow involves a dedicated launch script (`launch_sim.sh`) that correctly prepares the shell environment for both ROS 2 and Gazebo. This script then executes a single launch file that sets up all necessary nodes for the simulation.
 
-The debugging process uncovered and resolved critical configuration errors.
+The debugging process resolved configuration, environment, and launch-related errors.
 
 | Issue | Root Cause | File(s) Affected | Corrective Action Taken | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **XML Parse Error** | Incorrect XACRO syntax (`:=` instead of `=`) was used when passing an argument to a macro, causing the XML parser to fail. | `custom_ur10.urdf.xacro` | Corrected the macro call syntax to `use_gazebo="$(arg use_gazebo)"`. | **Resolved** |
-| **Undefined XACRO Parameter** | The launch file was loading a copy of the URDF from the `moveit_config` package instead of the primary, modified URDF in the `description` package. | `ur10_gazebo_moveit.launch.py` | The launch file was modified to use the absolute path to the correct URDF in the `ur10_description` package, making it the single source of truth. | **Resolved** |
-| **Controller Activation Failure** | A mismatch existed between the controller and the hardware interface. The controller's YAML requested a `velocity` command interface, but the `ros2_control` URDF tag only provided `position`. | `ros2_controllers.yaml` | Removed `velocity` from the `command_interfaces` list in the YAML file to match the hardware interface definition. | **Resolved** |
-| **Plugin Name Ambiguity** | Conflicting documentation led to uncertainty over the correct plugin name for `gz_ros2_control` in ROS 2 Jazzy. Official documentation confirmed the explicit library name was required. | `ur10.gazebo.xacro` | The plugin declaration was set to the explicit library name: `filename="libgz_ros2_control-system.so"`. | **Resolved** |
-| **Environment Configuration** | The Gazebo process (`gz sim`) could not find ROS 2 plugins or models because its specific environment variables were not set. This was identified as a known issue in `ros_gz`.| `launch_sim.sh` (created) | Created a launch script to explicitly `export` `GZ_SIM_SYSTEM_PLUGIN_PATH` and `GZ_SIM_RESOURCE_PATH`, pointing them to the system (`/opt/ros/jazzy/...`) and workspace install directories. | **Resolved** |
+| **Plugin Not Found** | Gazebo's environment variables were not set, preventing it from finding the `gz_ros2_control` shared library. This was identified as a known issue in `ros_gz`. | `launch_sim.sh` (created) | Created a script to explicitly `export GZ_SIM_SYSTEM_PLUGIN_PATH`, pointing it to the system ROS 2 install path (`/opt/ros/jazzy/lib`). | **Resolved** |
+| **Controller Activation Failure** | A mismatch existed between the controller's YAML configuration (requesting `velocity` commands) and the hardware interface definition in the URDF (only providing `position` commands). | `ros2_controllers.yaml` | Removed `velocity` from the `command_interfaces` list in the YAML file to match the hardware interface. | **Resolved** |
+| **Missing Clock Bridge** | When using simulated time, ROS 2 nodes were not receiving time updates because the bridge from Gazebo's clock to the ROS `/clock` topic was missing. | `ur10_gazebo_moveit.launch.py` | Added a `ros_gz_bridge` `parameter_bridge` node to the main launch file to translate and publish the `/clock` topic. | **Resolved** |
+| **Gazebo Launch Method** | Directly calling the `gz sim` executable was less robust and failed to properly set up resource paths compared to using the official ROS 2 launch integration. | `ur10_gazebo_moveit.launch.py` | The launch file was updated to use `IncludeLaunchDescription` to call the official `gz_sim.launch.py` from the `ros_gz_sim` package. | **Resolved** |
+| **Mesh Loading Failure** | A combination of incorrect URI schemes (`model://` vs. `package://`) and Gazebo's inability to find local workspace resources blocked mesh loading. | `end_effector.urdf.xacro`, `launch_sim.sh` | Reverted all mesh paths to the ROS-standard `package://`. Added the local workspace `src` directory to the `GZ_SIM_RESOURCE_PATH` in the launch script. | **Resolved** |
 
 ---
 
-## III. Final System State and Log Analysis
+## III. Verification of Successful Operation
 
-After implementing all configuration corrections and performing a clean workspace rebuild, the final launch attempt successfully loaded all plugins and controllers, but revealed a final issue with resource loading (meshes).
+The final launch script successfully starts the entire simulation stack, and the resulting log is clean of all critical errors. The system's ability to initialize all components confirms that the Gazebo backend, `ros2_control` interface, and MoveIt frontend are all communicating correctly.
 
-**Analysis of Final Log:**
+**Successful Log Snippets:**
 
-The final log indicates that all previous errors have been resolved. The system is now blocked only by the inability of ROS nodes and Gazebo to find the robot's mesh files.
-
-| Key Log Snippet | Significance |
+| Log Message | Significance |
 | :--- | :--- |
-| `[gz-1] [INFO] ... [controller_manager]: Resource Manager has been successfully initialized.` <br> `[spawner-7] [INFO] ... Configured and activated arm_controller` | **Major Success:** This confirms the `gz_ros2_control` plugin loaded and activated all controllers. The core integration is **functional**. |
-| `[move_group-4] Error: Error retrieving file [model://...]: Protocol "model" not supported or disabled in libcurl` <br> `[rviz2-5] [ERROR] ... Could not load resource [model://...]` | **Persistent Issue 1:** ROS nodes (MoveIt/RViz) do not support the `model://` URI. This indicates the mesh paths in the URDF must be reverted from `model://` to `package://`. |
-| `[gz-1] [Err] ... Error retrieving file [model://ur10_description/meshes/ee/collision/mock-up-end-effector.stl]` | **Persistent Issue 2 (Blocker):** Even with the correct environment variables, the Gazebo process also fails to resolve the `model://` URI.
+| `[gazebo-1] [INFO] ... [controller_manager]: Resource Manager has been successfully initialized.`| Confirms the `gz_ros2_control` plugin loaded correctly and the Controller Manager is running inside Gazebo. |
+| `[spawner-5] [INFO] ... Configured and activated arm_controller` <br> `[spawner-6] [INFO] ... Configured and activated joint_state_broadcaster`| Confirms both the arm trajectory controller and the joint state broadcaster connected to the Controller Manager and were successfully activated. |
+| `[move_group-7] [INFO] ... You can start planning now!` | Confirms that MoveIt has a valid robot model, is receiving joint states from the simulation, and is ready to accept motion planning requests. |
+| *(Absence of Errors)* | The final log is free from any `Could not find shared library` or `Unable to find file` errors, indicating all plugins and meshes loaded successfully. |
 
 ---
 
-## IV. Conclusion and Persistent Issues
+## IV. Conclusion and Next Steps
 
-All user-level configuration files (`.xacro`, `.yaml`, `.launch.py`) have been successfully debugged and are **correct**. The simulation's control and physics backend is **functional**.
+The `ur10_moveit_config` package and its related descriptions are now stable for physics-based simulation with Gazebo and MoveIt.
+**Next Steps:**
 
-The system remains partially non-functional due to a persistent, system-level issue preventing both ROS nodes and the Gazebo process from locating the robot's mesh files.
+1. **Testing:** Do thorough testing of motion planning using gazebo and moveit
 
-**Persistent Issues & Next Steps:**
+**Known Minor Warnings:**
 
-1.  **Primary Blocker - Mesh URI Conflict:** There is a conflict between the URI schemes required by ROS and Gazebo. ROS nodes (MoveIt, RViz) require `package://` to find resources, while Gazebo is intended to use `model://` (via `GZ_SIM_RESOURCE_PATH`). The immediate next step is to revert all mesh paths in the URDF to `package://` to restore functionality in RViz and MoveIt, and then debug the Gazebo visualization separately.
-
-2.  **Minor MoveIt Warnings:** The logs continue to show warnings related to the missing Octomap plugin and the `welding_torch_end_effector` group, which can be safely ignored for the current objective.
+1.  **Octomap Errors:** The environment is currently missing a plugin required to load point cloud data for dynamic collision avoidance (`occupancy_map_monitor/PointCloudOctomapUpdater`). This is **safe to ignore** for basic planning but must be addressed when integrating sensor data.
+2.  **End-Effector Warning:** A minor warning remains regarding the inability to identify the parent group for the `welding_torch_end_effector` in the SRDF. This is a non-critical MoveIt configuration warning and does not affect the functionality of the `arm` planning group.
 
 ---
 
-## Launch Script
+## Appendix A: Final Launch Script
 
-The following script, named `launch_sim.sh` and placed in the workspace root (`~/ws`).
+The following script, named `launch_sim.sh` and placed in the workspace root (`~/ws`)
 
 **Usage:**
 ```bash
@@ -76,8 +75,6 @@ chmod +x launch_sim.sh
 ```bash
 #!/bin/bash
 
-# Final script to set the environment correctly and launch the simulation.
-
 echo "--- Sourcing and Configuring Environment ---"
 
 # 1. Define the workspace directory
@@ -89,9 +86,9 @@ source /opt/ros/jazzy/setup.bash
 # 3. Source the local workspace overlay
 source ${WS_DIR}/install/setup.bash
 
-# 4. Explicitly set the Gazebo paths, including the system path and workspace path
+# 4. Explicitly set the Gazebo paths.
 export GZ_SIM_SYSTEM_PLUGIN_PATH=${WS_DIR}/install/lib:/opt/ros/jazzy/lib
-export GZ_SIM_RESOURCE_PATH=${WS_DIR}/install/share:/opt/ros/jazzy/share
+export GZ_SIM_RESOURCE_PATH=${WS_DIR}/src/ur10:/opt/ros/jazzy/share
 
 # 5. Verify the environment
 echo "GZ_SIM_SYSTEM_PLUGIN_PATH is set to: ${GZ_SIM_SYSTEM_PLUGIN_PATH}"
