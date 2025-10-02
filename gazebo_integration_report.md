@@ -56,3 +56,48 @@ The system remains partially non-functional due to a persistent, system-level is
 1.  **Primary Blocker - Mesh URI Conflict:** There is a conflict between the URI schemes required by ROS and Gazebo. ROS nodes (MoveIt, RViz) require `package://` to find resources, while Gazebo is intended to use `model://` (via `GZ_SIM_RESOURCE_PATH`). The immediate next step is to revert all mesh paths in the URDF to `package://` to restore functionality in RViz and MoveIt, and then debug the Gazebo visualization separately.
 
 2.  **Minor MoveIt Warnings:** The logs continue to show warnings related to the missing Octomap plugin and the `welding_torch_end_effector` group, which can be safely ignored for the current objective.
+
+---
+
+## Launch Script
+
+The following script, named `launch_sim.sh` and placed in the workspace root (`~/ws`).
+
+**Usage:**
+```bash
+# Make the script executable once
+chmod +x launch_sim.sh
+
+# Run the simulation
+./launch_sim.sh
+```
+
+**launch_sim.sh**
+```bash
+#!/bin/bash
+
+# Final script to set the environment correctly and launch the simulation.
+
+echo "--- Sourcing and Configuring Environment ---"
+
+# 1. Define the workspace directory
+WS_DIR=~/ws
+
+# 2. Source the base ROS 2 Jazzy installation
+source /opt/ros/jazzy/setup.bash
+
+# 3. Source the local workspace overlay
+source ${WS_DIR}/install/setup.bash
+
+# 4. Explicitly set the Gazebo paths, including the system path and workspace path
+export GZ_SIM_SYSTEM_PLUGIN_PATH=${WS_DIR}/install/lib:/opt/ros/jazzy/lib
+export GZ_SIM_RESOURCE_PATH=${WS_DIR}/install/share:/opt/ros/jazzy/share
+
+# 5. Verify the environment
+echo "GZ_SIM_SYSTEM_PLUGIN_PATH is set to: ${GZ_SIM_SYSTEM_PLUGIN_PATH}"
+echo "GZ_SIM_RESOURCE_PATH is set to: ${GZ_SIM_RESOURCE_PATH}"
+echo "------------------------------------------"
+
+# 6. Launch the simulation
+ros2 launch ur10_moveit_config ur10_gazebo_moveit.launch.py
+```
