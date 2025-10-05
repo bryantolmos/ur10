@@ -7,7 +7,6 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(urdf_tutorial REQUIRED)
 
 # copy the necessary files to designated locations in project
 install(
