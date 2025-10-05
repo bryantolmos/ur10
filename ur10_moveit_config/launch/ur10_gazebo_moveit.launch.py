@@ -5,27 +5,18 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 from moveit_configs_utils import MoveItConfigsBuilder
-from moveit_configs_utils.launches import (
-    generate_move_group_launch,
-    generate_moveit_rviz_launch,
-    generate_spawn_controllers_launch,
-    generate_static_virtual_joint_tfs_launch,
-)
 
 def generate_launch_description():
-    # Find the absolute path to the correct URDF file
-    urdf_xacro_path = os.path.join(
-        get_package_share_directory("ur10_description"), 
-        "urdf", 
-        "robots", 
-        "custom_ur10.urdf.xacro"
-    )
-
-    # Build the MoveIt configuration
+    # Step 1: Build the MoveIt configuration dictionary
     moveit_config = (
         MoveItConfigsBuilder("ur10_with_custom_ee", package_name="ur10_moveit_config")
         .robot_description(
-            file_path=urdf_xacro_path,
+            file_path=os.path.join(
+                get_package_share_directory("ur10_description"),
+                "urdf",
+                "robots",
+                "custom_ur10.urdf.xacro",
+            ),
             mappings={"use_gazebo": "true"},
         )
         .robot_description_semantic(file_path="config/ur10_with_custom_ee.srdf")
@@ -33,7 +24,7 @@ def generate_launch_description():
         .to_moveit_configs()
     )
 
-    # Launch Gazebo Sim
+    # Step 2: Start Gazebo
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(get_package_share_directory("ros_gz_sim"), "launch", "gz_sim.launch.py")
@@ -41,20 +32,16 @@ def generate_launch_description():
         launch_arguments={"gz_args": "-r empty.sdf"}.items(),
     )
 
-    # Spawn the robot in Gazebo
+    # Step 3: Spawn the robot in Gazebo
     spawn_entity = Node(
         package="ros_gz_sim",
         executable="create",
-        arguments=[
-            "-topic", "robot_description",
-            "-name", "ur10",
-            "-allow_renaming", "true",
-        ],
+        arguments=["-topic", "robot_description", "-name", "ur10"],
         output="screen",
     )
 
-    # Robot State Publisher
-    rsp_node = Node(
+    # Step 4: Start the Robot State Publisher
+    robot_state_publisher = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
         name="robot_state_publisher",
@@ -62,10 +49,11 @@ def generate_launch_description():
         parameters=[moveit_config.robot_description, {"use_sim_time": True}],
     )
 
-    # Controller Spawners
-    spawn_controllers_launch = generate_spawn_controllers_launch(moveit_config)
+    # Step 5: Start the ros2_control spawner nodes
+    from moveit_configs_utils.launches import generate_spawn_controllers_launch
+    spawn_controllers = generate_spawn_controllers_launch(moveit_config)
 
-    # Bridge to publish the /clock topic
+    # Step 6: Start the clock bridge
     clock_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -73,22 +61,41 @@ def generate_launch_description():
         output='screen'
     )
 
-    # === ADD THESE COMPONENTS BACK ===
-    # Generate MoveIt launches
-    move_group_launch = generate_move_group_launch(moveit_config)
-    moveit_rviz_launch = generate_moveit_rviz_launch(moveit_config)
-    static_tf_launch = generate_static_virtual_joint_tfs_launch(moveit_config)
-    # ===============================
+    # Step 7: Manually define the MoveGroup node
+    move_group_node = Node(
+        package="moveit_ros_move_group",
+        executable="move_group",
+        output="screen",
+        parameters=[
+            moveit_config.to_dict(),
+            {"use_sim_time": True}, 
+        ],
+        arguments=["--ros-args", "--log-level", "info"],
+    )
+
+    # Step 8: Manually define the RViz node
+    rviz_node = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="screen",
+        arguments=[],
+        parameters=[
+            moveit_config.robot_description,
+            moveit_config.robot_description_semantic,
+            moveit_config.robot_description_kinematics,
+            moveit_config.planning_pipelines,
+            moveit_config.joint_limits,
+            {"use_sim_time": True},
+        ],
+    )
 
     return LaunchDescription([
         gazebo,
         clock_bridge,
-        rsp_node,
+        robot_state_publisher,
         spawn_entity,
-        spawn_controllers_launch,
-        # === ADD THESE TO THE LAUNCH LIST ===
-        move_group_launch,
-        moveit_rviz_launch,
-        static_tf_launch,
-        # ====================================
+        spawn_controllers,
+        move_group_node,
+        rviz_node,
     ])
