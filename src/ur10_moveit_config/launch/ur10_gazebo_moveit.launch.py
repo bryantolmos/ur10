@@ -90,6 +90,19 @@ def generate_launch_description():
         ],
     )
 
+    # Step 9: Launch lifecycle planner node
+    lifecycle_planner_node = Node(
+        package="ur10_planner",
+        executable="lifecycle_planner",
+        name="lifecycle_planner",
+        output="screen",
+        emulate_tty=True,
+        parameters=[
+            moveit_config.to_dict(),
+            {"use_sim_time": True},
+        ],
+    )
+
     return LaunchDescription([
         gazebo,
         clock_bridge,
@@ -98,4 +111,5 @@ def generate_launch_description():
         spawn_controllers,
         move_group_node,
         rviz_node,
+        lifecycle_planner_node,
     ])
