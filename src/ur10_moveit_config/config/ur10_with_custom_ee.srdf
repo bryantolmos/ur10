@@ -16,6 +16,7 @@
         <joint name="wrist_1_joint"/>
         <joint name="wrist_2_joint"/>
         <joint name="wrist_3_joint"/>
+        <link name="custom_ee_link"/>
     </group>
     <group name="welding_torch">
         <joint name="custom_ee_joint"/>
