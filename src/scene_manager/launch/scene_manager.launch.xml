@@ -1,0 +1,40 @@
+<launch>
+    <!--node pkg="scene_manager"
+    exec="scene_manager"
+    name="scene_manager"
+    output="screen"-->
+    <!-- I can add more nodes to launch here if necessary --> 
+
+    <!-- start RViz with a specific configuration for our project purposes -->
+    <arg name="rviz_config" default="$(find-pkg-share scene_manager)/config/moveit.rviz"/>
+
+    <!-- Open a window with rviz; args was added to open the custom config file -->
+    <node pkg="rviz2" exec="rviz2" name="rviz2" output="screen" args="-d $(var rviz_config)">
+        <!-- Optional: Load an RViz configuration file -->
+        <!-- <arg name="rviz_config" default="$(find-pkg-share scene_manager)/config/your_rviz_config.rviz"/>
+        <param name="config" value="$(var rviz_config)"/> -->
+    </node>
+
+    <!-- Gazebo launcher with custom world -->
+    <arg name="world_sdf_file" default="$(find-pkg-share scene_manager)/worlds/ur10_ws.sdf"/>
+
+    <include file="$(find-pkg-share ros_gz_sim)/launch/gz_sim.launch.py">
+        <arg name="gz_args" value="-r $(var world_sdf_file)"/>
+    </include>
+
+    <!-- Declare the launch argument BEFORE for use_sim_time -->
+    <arg name="use_sim_time" default="true" description="Use simulation (Gazebo) clock if true"/>
+
+    <!-- Robot state publisher to publish the UR10 robot model --> 
+    <node pkg="robot_state_publisher" exec="robot_state_publisher" name="robot_state_publisher" output="screen">
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+        <param name="robot_description" value="$(command 'xacro $(var ur10_description/urdf/robot/custom_ur10.urdf.xacro)')"/>
+    </node>
+
+    <!-- Spawn robot into gz from /robot_descrition -->
+    <node pkg="ros_gz_sim" exec="create" name="spawn_urdf" output="screen"
+        args="-name ur10 -topic robot_description"/>
+
+    <!-- Optional: also start your node -->
+    <!-- <node pkg="scene_manager" exec="scene_manager" name="scene_manager" output="screen"/> -->
+</launch>
