@@ -5,6 +5,8 @@
 #include <cmath>
 #include <chrono>
 
+#include "../include/ur10_planner/waypoint_publisher.hpp"
+
 class WaypointPublisher : public rclcpp::Node {
 public:
     WaypointPublisher() : Node("waypoint_publisher") {
@@ -62,12 +64,3 @@ private:
     rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr publisher_;
     rclcpp::TimerBase::SharedPtr timer_;
 };
-
-
-
-int main(int argc, char **argv) {
-    rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<WaypointPublisher>());
-    rclcpp::shutdown();
-    return 0;
-}

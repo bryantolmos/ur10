@@ -18,7 +18,10 @@ find_package(geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 
-add_executable(lifecycle_planner src/lifecycle_planner.cpp)
+add_executable(lifecycle_planner 
+  src/lifecycle_planner.cpp
+  src/waypoint_pub.cpp)
+
 ament_target_dependencies(
   lifecycle_planner
   rclcpp
@@ -28,23 +31,18 @@ ament_target_dependencies(
   moveit_ros_planning_interface
   moveit_msgs
   moveit_visual_tools
-)
-
-add_executable(waypoint_pub src/waypoint_pub.cpp)
-ament_target_dependencies(
-  waypoint_pub
   tf2_geometry_msgs
   tf2
   geometry_msgs
 )
 
 install(
-  TARGETS lifecycle_planner
-  DESTINATION lib/${PROJECT_NAME}
+  DIRECTORY include/
+  DESTINATION include
 )
 
 install(
-  TARGETS waypoint_pub
+  TARGETS lifecycle_planner
   DESTINATION lib/${PROJECT_NAME}
 )
 
