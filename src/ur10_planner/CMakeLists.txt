@@ -14,6 +14,9 @@ find_package(moveit_ros_move_group REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 
 add_executable(lifecycle_planner src/lifecycle_planner.cpp)
 ament_target_dependencies(
@@ -27,8 +30,21 @@ ament_target_dependencies(
   moveit_visual_tools
 )
 
+add_executable(waypoint_pub src/waypoint_pub.cpp)
+ament_target_dependencies(
+  waypoint_pub
+  tf2_geometry_msgs
+  tf2
+  geometry_msgs
+)
+
 install(
   TARGETS lifecycle_planner
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  TARGETS waypoint_pub
   DESTINATION lib/${PROJECT_NAME}
 )
 
