@@ -18,9 +18,22 @@ find_package(geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 
+add_library(ur10_planner_lib
+  src/waypoint_pub.cpp
+)
+
+ament_target_dependencies(
+  ur10_planner_lib
+  rclcpp
+  geometry_msgs
+  tf2
+)
+
 add_executable(lifecycle_planner 
   src/lifecycle_planner.cpp
-  src/waypoint_pub.cpp)
+  )
+
+target_link_libraries(lifecycle_planner ur10_planner_lib)
 
 ament_target_dependencies(
   lifecycle_planner
@@ -34,6 +47,7 @@ ament_target_dependencies(
   tf2_geometry_msgs
   tf2
   geometry_msgs
+  std_srvs
 )
 
 install(
@@ -42,8 +56,10 @@ install(
 )
 
 install(
-  TARGETS lifecycle_planner
-  DESTINATION lib/${PROJECT_NAME}
+  TARGETS lifecycle_planner ur10_planner_lib
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)

@@ -1,6 +1,7 @@
 // ros2
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <lifecycle_msgs/msg/state.hpp>
 
 // c++
 #include <thread>
@@ -16,6 +17,11 @@
 #include <moveit_msgs/msg/attached_collision_object.hpp>
 #include <moveit_msgs/msg/collision_object.hpp>
 
+// utilities
+#include "../include/ur10_planner/waypoint_publisher.hpp"
+
+#include <std_srvs/srv/trigger.hpp>
+
 // LCR = Lifecycle Callback Return
 using LCR = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 namespace rvt = rviz_visual_tools;
@@ -26,7 +32,10 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
         lifecycle_planner(const rclcpp::NodeOptions & options) : 
         LifecycleNode("lifecycle_planner", options),
         PLANNING_GROUP("arm"),
-        END_EFFECTOR("welding_torch_end_effector")
+        END_EFFECTOR("welding_torch_end_effector"),
+        PATH_TOPIC("/welding_path"),
+        SERVICE("~/plan_and_execute"),
+        TRAJECTORY_TOPIC("/planned_trajectory")
         {
             RCLCPP_INFO(this->get_logger(), "In constructor ... waiting for next step");
         }
@@ -42,11 +51,16 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
             auto node_options = this->get_node_options();
             moveit_node = std::make_shared<rclcpp::Node>("lifecycle_planner_moveit_node", node_options);
 
+            // initialize waypoint publisher node
+            waypoint_publisher_node = std::make_shared<ur10_planner::WaypointPublisher>(node_options);
+
+            // add both nodes into a seperate thread
             executor_thread = std::thread([this]() {
                 this->executor.add_node(this->moveit_node);
+                this->executor.add_node(this->waypoint_publisher_node);
                 this->executor.spin();
             });
-            RCLCPP_INFO(this->get_logger(), "MoveIt node thread started");
+            RCLCPP_INFO(this->get_logger(), "node thread started");
 
             // start and check MoveGroupInterface initialization
             move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(moveit_node, PLANNING_GROUP);
@@ -65,6 +79,28 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
 
             // set the end effector from the robots SRDF
             move_group->setEndEffector(END_EFFECTOR);
+
+            // initialize path_subscriber using transient local qos
+            //auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local();
+            auto qos = rclcpp::SystemDefaultsQoS();
+
+            path_subscriber = this->create_subscription<geometry_msgs::msg::PoseArray>(
+                PATH_TOPIC,
+                qos,
+                std::bind(&lifecycle_planner::path_callback, this, std::placeholders::_1)
+            );
+
+            // initialize trajectory publisher
+            trajectory_publisher = this->create_publisher<moveit_msgs::msg::RobotTrajectory>(
+                TRAJECTORY_TOPIC,
+                rclcpp::SystemDefaultsQoS()
+            );
+
+            // initialize service
+            trigger_planning_service = this->create_service<std_srvs::srv::Trigger>(
+                SERVICE,
+                std::bind(&lifecycle_planner::planning_callback, this, std::placeholders::_1, std::placeholders::_2)
+            );
 
             // initialize planning scene and visual tools
             planning_scene_interface = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
@@ -88,44 +124,10 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
         LCR on_activate(const rclcpp_lifecycle::State &previous_state) {
             RCLCPP_INFO(this->get_logger(), "IN **ON_ACTIVATE**");
             rclcpp_lifecycle::LifecycleNode::on_activate(previous_state);
-            moveit::planning_interface::MoveGroupInterface::Plan plan;
             
-            visual_tools->prompt("Press 'next' in the RvizVisualToolsGui window to start");
+            received_waypoints.clear();
 
-            // set target pose
-            //target_pose.position = move_group->getCurrentPose().pose.position;
-            //target_pose.orientation = move_group->getCurrentPose().pose.orientation;
-            //target_pose.position.x = move_group->getCurrentPose().pose.position.x + 0.5;
-            //target_pose.position.y = move_group->getCurrentPose().pose.position.y + 0.8;
-            //target_pose.position.z = move_group->getCurrentPose().pose.position.z + 0.6;
-            target_pose = move_group->getCurrentPose().pose;
-            target_pose.position.x += 0.5;
-            target_pose.position.z += 0.3;
-
-            move_group->setPoseTarget(target_pose);
-
-            // plan out
-            bool success = (move_group->plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
-            RCLCPP_INFO(this->get_logger(), "Visualizing plan (pose goal) %s", success ? "" : "FAILED");
-
-            if(!success) {
-                return LCR::FAILURE;
-            }
-
-            // visualizing plan
-            RCLCPP_INFO(this->get_logger(), "Visualizing plan as trajectory line");
-            const std::string ee_link_name = move_group->getEndEffectorLink();
-            const moveit::core::LinkModel* ee_link_model = move_group->getRobotModel()->getLinkModel(ee_link_name);
-            const moveit::core::JointModelGroup* joint_model_group = move_group->getCurrentState()->getJointModelGroup(PLANNING_GROUP);
-
-            visual_tools->publishAxisLabeled(target_pose, "test_pose");
-            visual_tools->publishText(text_pose, "pose_goal", rvt::WHITE, rvt::XLARGE);
-            visual_tools->publishTrajectoryLine(plan.trajectory, ee_link_model, joint_model_group);
-            visual_tools->trigger();
-
-            // execute plan
-            visual_tools->prompt("Press 'next' in the RvizVisualToolsGui window to move the robot along visualized trajectory");
-            move_group->move();
+            trajectory_publisher->on_activate();
 
             return LCR::SUCCESS;
         };
@@ -136,6 +138,10 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
             if(move_group) {
                 move_group->stop();
             }
+
+            received_waypoints.clear();
+
+            trajectory_publisher->on_deactivate();
 
             rclcpp_lifecycle::LifecycleNode::on_deactivate(previous_state);
             return LCR::SUCCESS;
@@ -159,6 +165,11 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
             planning_scene_interface.reset();
             visual_tools.reset();
             moveit_node.reset();
+            waypoint_publisher_node.reset();
+
+            path_subscriber.reset();
+            trigger_planning_service.reset();
+            trajectory_publisher.reset();
 
             RCLCPP_INFO(this->get_logger(), "SUCCESSFUL cleanup");
             return LCR::SUCCESS;
@@ -170,9 +181,84 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
         };
 
     private:
+        void path_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg) {
+            // check if node is active
+            if(this->get_current_state().id() != lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE) {
+                RCLCPP_WARN(this->get_logger(), "Path publisher not active, waiting ...");
+                return;
+            }
+            
+            // store data
+            this->received_waypoints.clear();
+            this->received_waypoints = msg->poses;
+
+            RCLCPP_INFO(this->get_logger(), "Received and store new path with %zu waypoints", this->received_waypoints.size());
+        }
+
+        void planning_callback(const std::shared_ptr<std_srvs::srv::Trigger::Request> request, std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+                (void) request;
+
+                // check if node is active
+                if(this->get_current_state().id() != lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE) {
+                    RCLCPP_ERROR(this->get_logger(), "service called while node is not active");
+                    response->success = false;
+                    response->message = "Planner not active";
+                    return;
+                }
+
+                // check if we have waypoints
+                if(this->received_waypoints.empty()) {
+                    RCLCPP_ERROR(this->get_logger(), "Service called but no path received");
+                    response->success = false;
+                    response->message = "No path received";
+                    return;
+                }
+
+                RCLCPP_INFO(this->get_logger(), "Planning service called with %zu waypoints", this->received_waypoints.size());
+
+                // create trajectory object then compute cartesian path
+                moveit_msgs::msg::RobotTrajectory trajectory;
+
+                double fraction = move_group->computeCartesianPath(
+                    this->received_waypoints, // input path to follow
+                    0.01, // ee step, 1cm
+                    trajectory // output
+                );
+
+                RCLCPP_INFO(this->get_logger(), "Cartesian path (%.2f%%) achieved", fraction * 100);
+
+                if (fraction < 0.97) {
+                    RCLCPP_ERROR(this->get_logger(), "Failed to compute full Cartesian path");
+                    response->success = false;
+                    response->message = "Failed to compute full cartesian path";
+                    return;
+                }
+
+                // visualize trajectory
+                const std::string ee_link_name = move_group->getEndEffectorLink();
+                const moveit::core::LinkModel* ee_link_model = move_group->getRobotModel()->getLinkModel(ee_link_name);
+                const moveit::core::JointModelGroup* joint_model_group = move_group->getCurrentState()->getJointModelGroup(PLANNING_GROUP);
+
+                visual_tools->publishTrajectoryLine(trajectory, ee_link_model, joint_model_group);
+                visual_tools->trigger();
+
+                // publish computed trajectory
+                trajectory_publisher->publish(trajectory);
+                RCLCPP_INFO(this->get_logger(), "Planning successful, trajectory published to /planned_trajectory");
+
+                // clean up the path
+                this->received_waypoints.clear();
+
+                response->success = true;
+                response->message = "Plan published for validation";
+            }
+
         // configuration variables
         const std::string PLANNING_GROUP;
         const std::string END_EFFECTOR;
+        const std::string PATH_TOPIC;
+        const std::string SERVICE;
+        const std::string TRAJECTORY_TOPIC;
 
         // moveit
         std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group;
@@ -181,11 +267,17 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
 
         // thread
         rclcpp::Node::SharedPtr moveit_node;
+        std::shared_ptr<ur10_planner::WaypointPublisher> waypoint_publisher_node;
         rclcpp::executors::SingleThreadedExecutor executor;
         std::thread executor_thread;
 
         Eigen::Isometry3d text_pose = Eigen::Isometry3d::Identity();
-        geometry_msgs::msg::Pose target_pose;
+
+        rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr path_subscriber;
+        rclcpp_lifecycle::LifecyclePublisher<moveit_msgs::msg::RobotTrajectory>::SharedPtr trajectory_publisher;
+        std::vector<geometry_msgs::msg::Pose> received_waypoints;
+        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr trigger_planning_service;
+
 };
 
 int main(int argc, char **argv) {
