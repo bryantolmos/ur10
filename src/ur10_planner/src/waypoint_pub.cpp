@@ -5,69 +5,72 @@
 #include <cmath>
 #include <chrono>
 
-class WaypointPublisher : public rclcpp::Node {
+class WaypointSubscriber : public rclcpp::Node {
 public:
-    WaypointPublisher() : Node("waypoint_publisher") {
-        publisher_ = this->create_publisher<geometry_msgs::msg::PoseArray>("/welding_path", 10);
-        timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(500),
-            std::bind(&WaypointPublisher::publish_waypoints, this)
+    WaypointSubscriber() : Node("WaypointSubscriber") {
+
+        auto sub_qos = rclcpp::QoS(10);
+        auto pub_qos = rclcpp::QoS(rclcpp::KeepLast(1))
+                                .transient_local() // ensures last message is available to new subscribers
+                                .reliable(); // ensures delivery, meaning the message is not lost
+
+        // Create subscription to "/welding_path" from frontend
+        sub_ = this->create_subscription<geometry_msgs::msg::PoseArray>(
+            "/welding_path",
+            sub_qos,
+            std::bind(&WaypointSubscriber::waypoint_callback, this, std::placeholders::_1)
         );
-        
-        RCLCPP_INFO(this->get_logger(), "Waypoint Publisher Node has started.");
-        // Additional initialization and publisher setup can be done here
+
+        // Latched publisher to "/welding_path" for planner/executor to use
+        pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>(
+            "/welding_path",
+            pub_qos
+        );
+
+        RCLCPP_INFO(this->get_logger(),
+                    "WaypointRelayNode started. Listening to /welding_path, "
+                    "latched publish on /PLACEHOLDER_TOPIC_NAME).");
     }
 
 private:
-    void publish_waypoints() {
-        auto message = geometry_msgs::msg::PoseArray();
-        message.header.stamp = this->now(); 
-        message.header.frame_id = "world";
+    void waypoint_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg) {
+        RCLCPP_INFO(this->get_logger(), "Received PoseArray with %zu poses.", msg->poses.size());
+        print_pose_array(*msg);
 
-        /* From github:
-        - simple path (e.g., a 10cm line in the x-direction,
-        with the end-effector pointing straight down).
-        */
-        
-        // First waypoint
-        geometry_msgs::msg::Pose pose1;
-        pose1.position.x = -1.0;
-        pose1.position.y = 0.5;
-        pose1.position.z = 0.5;
-        tf2::Quaternion q1;
-        q1.setRPY(0, M_PI, 0); 
-        pose1.orientation.x = q1.x();
-        pose1.orientation.y = q1.y();
-        pose1.orientation.z = q1.z();
-        pose1.orientation.w = q1.w();
-        message.poses.push_back(pose1);
-
-        // Second waypoint
-        geometry_msgs::msg::Pose pose2;
-        pose2.position.x = -1.0;
-        pose2.position.y = -0.5;
-        pose2.position.z = 0.5;
-        tf2::Quaternion q2;
-        q2.setRPY(0, 0, 0); 
-        pose1.orientation.x = q2.x();
-        pose1.orientation.y = q2.y();
-        pose1.orientation.z = q2.z();
-        pose1.orientation.w = q2.w();
-        message.poses.push_back(pose2);
-
-        publisher_->publish(message);
-        RCLCPP_INFO(this->get_logger(), "Publishing PoseArray.");
+        if (!published_once_) {
+            pub_->publish(*msg);
+            published_once_ = true;
+            RCLCPP_INFO(this->get_logger(), "PoseArray latched on /PLACEHOLDER_TOPIC_NAME. "
+                                            "Future subscribers will receive this path.");
+        } else {
+            RCLCPP_INFO(this->get_logger(), "PoseArray already latched, ignoring input.");
+        }
     }
 
-    rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr publisher_;
-    rclcpp::TimerBase::SharedPtr timer_;
+    void print_pose_array(const geometry_msgs::msg::PoseArray & pose_array) {
+        RCLCPP_INFO(this->get_logger(), "PoseArray has %zu poses.", pose_array.poses.size());
+        for (size_t i = 0; i < pose_array.poses.size(); ++i) {
+            const auto & pose = pose_array.poses[i];
+            RCLCPP_INFO(
+                this->get_logger(),
+                "Pose %zu: Position(%.2f, %.2f, %.2f), Orientation(%.2f, %.2f, %.2f, %.2f)",
+                i,
+                pose.position.x, pose.position.y, pose.position.z,
+                pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w
+            );
+        }
+    }
+
+    rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr sub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pub_;
+    bool published_once_ = false;
 };
 
 
 
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<WaypointPublisher>());
+    rclcpp::spin(std::make_shared<WaypointSubscriber>());
     rclcpp::shutdown();
     return 0;
 }
