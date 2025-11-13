@@ -10,7 +10,7 @@ import threading
 
 # A simple ROS2 node that will publish the pose
 class PosePublisherNode(Node):
-    def __init__(self, topic_name='/goal_pose'):
+    def __init__(self):
         super().__init__('pose_publisher_gui_node')
         
         # Define a QoS profile that matches RViz's Goal Pose
@@ -20,13 +20,13 @@ class PosePublisherNode(Node):
             depth=1
         )
         
-        # Create the publisher with configurable topic
+        # Create the publisher
         self.publisher_ = self.create_publisher(
             PoseStamped,
-            topic_name,
+            '/goal_pose',  # Standard topic for MoveIt goals
             qos_profile
         )
-        self.get_logger().info(f'Pose Publisher Node started on topic: {topic_name}')
+        self.get_logger().info('Pose Publisher Node has been started.')
 
     def publish_pose(self, x, y, z, ox, oy, oz, ow):
         try:
@@ -34,7 +34,7 @@ class PosePublisherNode(Node):
             
             # Fill the header
             pose_msg.header.stamp = self.get_clock().now().to_msg()
-            pose_msg.header.frame_id = 'world'  # Or 'base_link', 'map', etc.
+            pose_msg.header.frame_id = 'base_link'  # Or 'base_link', 'map', etc.
             
             # Fill the pose
             pose_msg.pose.position.x = float(x)
@@ -48,7 +48,7 @@ class PosePublisherNode(Node):
             
             # Publish the message
             self.publisher_.publish(pose_msg)
-            self.get_logger().info(f'Publishing Goal Pose: Position[{x}, {y}, {z}] Orientation[w:{ow}, x:{ox}, y:{oy}, z:{oz}]')
+            self.get_logger().info(f'Publishing Goal Pose: [P: {x}, {y}, {z}] [O: {ow}, {ox}, {oy}, {oz}]')
             return True, "Pose published successfully!"
             
         except ValueError as e:
@@ -64,7 +64,7 @@ class PosePublisherGUI(tk.Tk):
         super().__init__()
         self.ros_node = ros_node
         self.title("UR10 Pose Publisher")
-        self.geometry("450x450")
+        self.geometry("400x400")
         
         # Set up the theme
         self.style = ttk.Style(self)
@@ -77,10 +77,11 @@ class PosePublisherGUI(tk.Tk):
         self.entries = {}
         
         # --- Position ---
-        pos_frame = ttk.LabelFrame(self, text="Position (m)", padding=(10, 5))
+        pos_frame = ttk.LabelFrame(self, text="Position (meters)", padding=(10, 5))
         pos_frame.grid(row=0, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
         pos_frame.columnconfigure(1, weight=1)
         
+        # *** FIX: Use unique keys for each entry ***
         self.create_entry(pos_frame, "X:", "0.5", 0, "pos_x")
         self.create_entry(pos_frame, "Y:", "0.0", 1, "pos_y")
         self.create_entry(pos_frame, "Z:", "0.5", 2, "pos_z")
@@ -90,46 +91,38 @@ class PosePublisherGUI(tk.Tk):
         ori_frame.grid(row=1, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
         ori_frame.columnconfigure(1, weight=1)
 
+        # *** FIX: Use unique keys for each entry ***
         self.create_entry(ori_frame, "W:", "1.0", 0, "ori_w")
         self.create_entry(ori_frame, "X:", "0.0", 1, "ori_x")
         self.create_entry(ori_frame, "Y:", "0.0", 2, "ori_y")
         self.create_entry(ori_frame, "Z:", "0.0", 3, "ori_z")
         
-        # --- Info Label ---
-        info_label = ttk.Label(
-            self, 
-            text="Note: Quaternion must be normalized (w²+x²+y²+z²=1)",
-            font=('TkDefaultFont', 8),
-            foreground='gray'
-        )
-        info_label.grid(row=2, column=0, columnspan=2, padx=10, pady=(0, 5), sticky="w")
-        
         # --- Publish Button ---
         self.publish_button = ttk.Button(
             self,
-            text="Publish the Goal Pose",
-            command=self.on_publish  # FIXED: Single underscore
+            text="Publish Goal Pose",
+            command=self.on_publish  # <-- FIX 1: Was self.on__publish
         )
-        self.publish_button.grid(row=3, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
+        self.publish_button.grid(row=2, column=0, columnspan=2, padx=10, pady=10, sticky="ew") # <-- FIX 2: Was padx=1a0
         
         # --- Status Label ---
         self.status_label = ttk.Label(self, text="Status: Ready", anchor="w")
-        self.status_label.grid(row=4, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+        self.status_label.grid(row=3, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
 
-    def create_entry(self, parent, label_text, default_value, row, key):
-        label = ttk.Label(parent, text=label_text, width=8)
+    def create_entry(self, parent, label_text, default_value, row, key): # <-- Added key
+        label = ttk.Label(parent, text=label_text)
         label.grid(row=row, column=0, padx=5, pady=5, sticky="e")
         
         entry = ttk.Entry(parent, width=20)
         entry.insert(0, default_value)
         entry.grid(row=row, column=1, padx=5, pady=5, sticky="ew")
         
-        self.entries[key] = entry
+        self.entries[key] = entry # <-- Use the unique key
         return entry
 
     def on_publish(self):
         try:
-            # Get values using unique keys
+            # *** FIX: Get values using unique keys ***
             x = self.entries['pos_x'].get()
             y = self.entries['pos_y'].get()
             z = self.entries['pos_z'].get()
@@ -138,18 +131,6 @@ class PosePublisherGUI(tk.Tk):
             ox = self.entries['ori_x'].get()
             oy = self.entries['ori_y'].get()
             oz = self.entries['ori_z'].get()
-            
-            # Validate quaternion normalization
-            try:
-                qw, qx, qy, qz = float(ow), float(ox), float(oy), float(oz)
-                norm = (qw**2 + qx**2 + qy**2 + qz**2) ** 0.5
-                if abs(norm - 1.0) > 0.01:  # Allow small tolerance
-                    self.status_label.config(
-                        text=f"Warning: Quaternion not normalized (norm={norm:.3f})", 
-                        foreground="orange"
-                    )
-            except ValueError:
-                pass  # Will be caught by publish_pose
             
             # Call the ROS node's publish method
             success, message = self.ros_node.publish_pose(x, y, z, ox, oy, oz, ow)
@@ -165,15 +146,10 @@ class PosePublisherGUI(tk.Tk):
 def main(args=None):
     rclpy.init(args=args)
     
-    topic_name = '/goal_pose'
-    
-    # Create the ROS node
-    ros_node = PosePublisherNode(topic_name=topic_name)
-    
-    # Set up and run the GUI
+    ros_node = PosePublisherNode()
     app = PosePublisherGUI(ros_node)
     
-    # Run the ROS node spinning in a separate thread
+    # Run the ROS node spinning
     ros_thread = threading.Thread(target=rclpy.spin, args=(ros_node,), daemon=True)
     ros_thread.start()
     
