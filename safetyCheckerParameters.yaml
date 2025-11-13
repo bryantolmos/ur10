@@ -1,0 +1,6 @@
+safety_checker_node:
+  ros__parameters:
+    max_joint_velocity: 1.2
+    max_joint_acceleration: 2.5
+    enable_velocity_check: true
+    enable_acceleration_check: true
