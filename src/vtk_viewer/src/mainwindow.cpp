@@ -1,8 +1,6 @@
 #include "mainwindow.h"
-#include <QVBoxLayout>
 #include <cmath>
 
-// --- NEW INCLUDES FOR PICKING ---
 #include <vtkInteractorStyleTrackballCamera.h>
 #include <vtkObjectFactory.h>
 #include <vtkCellPicker.h>
@@ -17,79 +15,65 @@ class ClickInteractorStyle : public vtkInteractorStyleTrackballCamera
 public:
   static ClickInteractorStyle* New();
   vtkTypeMacro(ClickInteractorStyle, vtkInteractorStyleTrackballCamera)
-
-  // Pointer to the main window so we can call addSelectedPoint
   MainWindow* main_window_ptr = nullptr;
 
   virtual void OnLeftButtonDown() override
   {
-    // Check if Shift key is held down
-    if (this->Interactor->GetShiftKey()) 
-    {
-      // Get mouse position
+    if (this->Interactor->GetShiftKey()) {
       int* clickPos = this->Interactor->GetEventPosition();
-
-      // Create a picker to find what we clicked on
       vtkNew<vtkCellPicker> picker;
       picker->SetTolerance(0.0005);
-
-      // Ray-cast from mouse position into the scene
       picker->Pick(clickPos[0], clickPos[1], 0, this->GetDefaultRenderer());
-
-      // Get the exact 3D world coordinates
       double* worldPos = picker->GetPickPosition();
-      
-      // Get the actor we clicked on
       vtkActor* clickedActor = picker->GetActor();
 
-      // Check if we clicked valid geometry AND if it is the Box (not the floor)
-      if (clickedActor && main_window_ptr && main_window_ptr->isTargetBox(clickedActor))
-      {
-        //Save the point.
+      if (clickedActor && main_window_ptr && main_window_ptr->isTargetBox(clickedActor)) {
         main_window_ptr->addSelectedPoint(worldPos[0], worldPos[1], worldPos[2]);
       }
-      else
-      {
-        printf("Clicked on floor or empty space\n");
-      }
-    }
-    else 
-    {
-      // No Shift key -> Normal Camera Rotation
+    } else {
       vtkInteractorStyleTrackballCamera::OnLeftButtonDown();
     }
   }
 };
-
 vtkStandardNewMacro(ClickInteractorStyle);
-// =========================================================
 
 
 MainWindow::MainWindow(rclcpp::Node::SharedPtr node, QWidget *parent)
   : QMainWindow(parent), ros_node_(node)
 {
   is_first_update_ = true;
-
   this->setWindowTitle("VTK Collision Object Viewer");
   this->setGeometry(100, 100, 800, 600);
 
-  vtk_widget_ = new QVTKOpenGLNativeWidget(this);
-  setCentralWidget(vtk_widget_);
+  // ---SETUP LAYOUT (Container -> Vtk Widget + Button) ---
+  QWidget* central_widget = new QWidget(this);
+  QVBoxLayout* layout = new QVBoxLayout(central_widget);
+  
+  // Create the VTK Widget
+  vtk_widget_ = new QVTKOpenGLNativeWidget(central_widget);
+  layout->addWidget(vtk_widget_); // Takes up all available space
 
+  // Create the Delete Button
+  delete_button_ = new QPushButton("Delete Last Point", central_widget);
+  layout->addWidget(delete_button_); // Sits at the bottom
+
+  // Set the layout
+  setCentralWidget(central_widget);
+
+  // Connect the button to the function
+  connect(delete_button_, &QPushButton::clicked, this, &MainWindow::deleteLastPoint);
+
+  // --- Setup VTK Pipeline ---
   vtk_widget_->renderWindow()->AddRenderer(renderer_);
   renderer_->SetBackground(colors_->GetColor3d("SlateGray").GetData());
 
-  // --- 1. Setup Interactor for Clicking ---
-  // Create our custom style
+  // Setup Interactor
   vtkNew<ClickInteractorStyle> style;
   style->SetDefaultRenderer(renderer_);
-  style->main_window_ptr = this; // Give it access to MainWindow functions
-
-  // Attach it to the widget
+  style->main_window_ptr = this;
   vtk_widget_->renderWindow()->GetInteractor()->SetInteractorStyle(style);
 
-  // --- 2. Create Objects ---
-  // Target Box
+  // Create Box
   box_source_->SetXLength(1.0); box_source_->SetYLength(1.0); box_source_->SetZLength(1.0);
   box_source_->SetCenter(0.0, 0.0, 0.0);
   box_mapper_->SetInputConnection(box_source_->GetOutputPort());
@@ -98,7 +82,7 @@ MainWindow::MainWindow(rclcpp::Node::SharedPtr node, QWidget *parent)
   box_actor_->GetProperty()->SetOpacity(0.8);
   renderer_->AddActor(box_actor_);
 
-  // Floor
+  // Create Floor
   floor_source_->SetXLength(1.0); floor_source_->SetYLength(1.0); floor_source_->SetZLength(0.1);
   floor_source_->SetCenter(0.0, 0.0, 0.0);
   floor_mapper_->SetInputConnection(floor_source_->GetOutputPort());
@@ -108,7 +92,7 @@ MainWindow::MainWindow(rclcpp::Node::SharedPtr node, QWidget *parent)
 
   renderer_->ResetCamera();
 
-  // --- 3. Setup ROS ---
+  // --- Setup ROS ---
   subscription_ = ros_node_->create_subscription<moveit_msgs::msg::CollisionObject>(
     "/collision_object", 
     rclcpp::QoS(rclcpp::KeepLast(10)).transient_local(), 
@@ -120,42 +104,72 @@ MainWindow::MainWindow(rclcpp::Node::SharedPtr node, QWidget *parent)
 
 MainWindow::~MainWindow() {}
 
-// --- NEW: Helper to identify the box ---
 bool MainWindow::isTargetBox(vtkActor* actor)
 {
     return (actor == box_actor_);
 }
 
-// --- NEW: Handle the click ---
+// --- addSelectedPoint now stores the actor ---
 void MainWindow::addSelectedPoint(double x, double y, double z)
 {
-    // 1. Save the point to the vector
+    // Save Data
     geometry_msgs::msg::Point p;
     p.x = x; p.y = y; p.z = z;
     stored_points_.push_back(p);
 
-    RCLCPP_INFO(ros_node_->get_logger(), "Point Saved: [%.3f, %.3f, %.3f] (Total: %zu)", x, y, z, stored_points_.size());
-
-    // 2. Visualize the click (Draw a small Red Sphere)
+    // Create Visual Sphere
     vtkNew<vtkSphereSource> sphere;
     sphere->SetCenter(x, y, z);
-    sphere->SetRadius(0.015); // Small radius (1.5cm)
-    sphere->SetPhiResolution(10); // Lower resolution for performance
+    sphere->SetRadius(0.015);
+    sphere->SetPhiResolution(10);
     sphere->SetThetaResolution(10);
 
     vtkNew<vtkPolyDataMapper> mapper;
     mapper->SetInputConnection(sphere->GetOutputPort());
 
-    vtkNew<vtkActor> actor;
+    // Use vtkSmartPointer so we can store it in our vector safely
+    vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
     actor->SetMapper(mapper);
-    actor->GetProperty()->SetColor(1.0, 0.0, 0.0); // Red color
-    
-    // Note: In a complex app, we might want to store these actors to delete them later
+    actor->GetProperty()->SetColor(1.0, 0.0, 0.0); // Red
+
     renderer_->AddActor(actor);
     
-    // Redraw
+    // Save the actor so we can delete it later!
+    point_actors_.push_back(actor);
+
+RCLCPP_INFO(ros_node_->get_logger(), "Point Added. [%.3f, %.3f, %.3f] Total: %zu", x, y, z, stored_points_.size());    vtk_widget_->renderWindow()->Render();
+}
+
+// --- deleteLastPoint ---
+void MainWindow::deleteLastPoint()
+{
+    // Check if there is anything to delete
+    if (stored_points_.empty()) {
+        RCLCPP_WARN(ros_node_->get_logger(), "No points to delete.");
+        return;
+    }
+
+    // Remove Data
+    stored_points_.pop_back();
+
+    // Remove Visual Actor
+    if (!point_actors_.empty()) {
+        // Get the last actor
+        vtkActor* actor_to_remove = point_actors_.back();
+        
+        // Remove it from the VTK scene
+        renderer_->RemoveActor(actor_to_remove);
+        
+        // Remove it from our storage list
+        point_actors_.pop_back();
+    }
+
+    RCLCPP_INFO(ros_node_->get_logger(), "Last point removed. Remaining: %zu", stored_points_.size());
+
+    // Redraw the scene
     vtk_widget_->renderWindow()->Render();
 }
+
 
 void MainWindow::topic_callback(const moveit_msgs::msg::CollisionObject::SharedPtr msg)
 {

@@ -5,19 +5,25 @@
 #include <QVTKOpenGLNativeWidget.h>
 #include <vtkRenderer.h>
 #include <vtkRenderWindow.h>
-#include <vtkCamera.h> // Fixed previous error
+#include <vtkCamera.h>
 #include <vtkActor.h>
 #include <vtkCubeSource.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkNew.h>
+#include <vtkSmartPointer.h> // For managing actor memory
 #include <vtkRenderWindowInteractor.h>
 #include <vtkNamedColors.h>
 #include <vtkProperty.h>
-#include <vector> 
+#include <vector>
+
+// --- Qt Includes ---
+#include <QPushButton>
+#include <QVBoxLayout>
+#include <QWidget>
 
 #include "rclcpp/rclcpp.hpp"
 #include "moveit_msgs/msg/collision_object.hpp"
-#include "geometry_msgs/msg/point.hpp" 
+#include "geometry_msgs/msg/point.hpp"
 
 class MainWindow : public QMainWindow
 {
@@ -27,30 +33,33 @@ public:
   MainWindow(rclcpp::Node::SharedPtr node, QWidget *parent = nullptr);
   ~MainWindow();
 
-  // --- NEW: Public function to handle clicks from the Interactor ---
   void addSelectedPoint(double x, double y, double z);
-  
-  // --- NEW: Helper to check if an actor is the target box ---
   bool isTargetBox(vtkActor* actor);
 
 private:
-  // --- Qt and VTK Members ---
+  // --- Qt GUI Elements ---
   QVTKOpenGLNativeWidget* vtk_widget_;
+  QPushButton* delete_button_; 
+
+  // --- VTK Members ---
   vtkNew<vtkRenderer> renderer_;
   vtkNew<vtkNamedColors> colors_;
 
-  // -- Target Box Objects --
+  // Target Box
   vtkNew<vtkActor> box_actor_;
   vtkNew<vtkCubeSource> box_source_;
   vtkNew<vtkPolyDataMapper> box_mapper_;
 
-  // -- Floor Objects --
+  // Floor
   vtkNew<vtkActor> floor_actor_;
   vtkNew<vtkCubeSource> floor_source_;
   vtkNew<vtkPolyDataMapper> floor_mapper_;
 
-  // --- NEW: Storage for selected points ---
+  // --- Point Storage ---
   std::vector<geometry_msgs::msg::Point> stored_points_;
+  
+  // We must store the actors so we can remove them later!
+  std::vector<vtkSmartPointer<vtkActor>> point_actors_; // <--- NEW
 
   // --- ROS 2 Members ---
   rclcpp::Node::SharedPtr ros_node_;
@@ -76,5 +85,8 @@ private slots:
   void updateVtkFloor(double posX, double posY, double posZ,
                       double dimX, double dimY, double dimZ,
                       double roll, double pitch, double yaw);
+                      
+  // --- NEW SLOT ---
+  void deleteLastPoint();
 };
 #endif
