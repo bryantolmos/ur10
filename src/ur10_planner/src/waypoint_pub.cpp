@@ -23,13 +23,13 @@ public:
 
         // Latched publisher to "/welding_path" for planner/executor to use
         pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>(
-            "/welding_path",
+            "/planned_trajectory",
             pub_qos
         );
 
         RCLCPP_INFO(this->get_logger(),
                     "WaypointRelayNode started. Listening to /welding_path, "
-                    "latched publish on /PLACEHOLDER_TOPIC_NAME).");
+                    "latched publish on /planned_trajectory.");
     }
 
 private:
@@ -40,7 +40,7 @@ private:
         if (!published_once_) {
             pub_->publish(*msg);
             published_once_ = true;
-            RCLCPP_INFO(this->get_logger(), "PoseArray latched on /PLACEHOLDER_TOPIC_NAME. "
+            RCLCPP_INFO(this->get_logger(), "PoseArray latched on /planned_trajectory."
                                             "Future subscribers will receive this path.");
         } else {
             RCLCPP_INFO(this->get_logger(), "PoseArray already latched, ignoring input.");
