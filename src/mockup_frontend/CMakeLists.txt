@@ -24,10 +24,25 @@ ament_target_dependencies(
   tf2
 )
 
+add_executable(inv_waypoint_sender src/inv_waypoint_sender.cpp)
+ament_target_dependencies(
+  inv_waypoint_sender
+  rclcpp
+  geometry_msgs
+  std_msgs
+  tf2
+)
+
 install(
   TARGETS waypoint_sender
   DESTINATION lib/${PROJECT_NAME}
 )
+
+install(
+  TARGETS inv_waypoint_sender
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
