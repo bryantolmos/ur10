@@ -5,6 +5,7 @@
 #include <vtkObjectFactory.h>
 #include <vtkCellPicker.h>
 #include <vtkSphereSource.h>
+#include <QDir>
 
 // =========================================================
 // Custom Interactor Style Class
@@ -45,23 +46,29 @@ MainWindow::MainWindow(rclcpp::Node::SharedPtr node, QWidget *parent)
   this->setWindowTitle("VTK Collision Object Viewer");
   this->setGeometry(100, 100, 800, 600);
 
-  // ---SETUP LAYOUT (Container -> Vtk Widget + Button) ---
+  // --- SETUP LAYOUT ---
   QWidget* central_widget = new QWidget(this);
   QVBoxLayout* layout = new QVBoxLayout(central_widget);
   
-  // Create the VTK Widget
   vtk_widget_ = new QVTKOpenGLNativeWidget(central_widget);
-  layout->addWidget(vtk_widget_); // Takes up all available space
+  layout->addWidget(vtk_widget_);
 
-  // Create the Delete Button
+  // Create a Horizontal Layout for buttons
+  QHBoxLayout* button_layout = new QHBoxLayout();
+  
   delete_button_ = new QPushButton("Delete Last Point", central_widget);
-  layout->addWidget(delete_button_); // Sits at the bottom
+  button_layout->addWidget(delete_button_);
+  
+  save_button_ = new QPushButton("Save JSON", central_widget); // <--- NEW BUTTON
+  button_layout->addWidget(save_button_);
 
-  // Set the layout
+  layout->addLayout(button_layout);
+
   setCentralWidget(central_widget);
 
-  // Connect the button to the function
+  // Connect buttons
   connect(delete_button_, &QPushButton::clicked, this, &MainWindow::deleteLastPoint);
+  connect(save_button_, &QPushButton::clicked, this, &MainWindow::savePointsToFile); // <--- CONNECT IT
 
   // --- Setup VTK Pipeline ---
   vtk_widget_->renderWindow()->AddRenderer(renderer_);
@@ -73,7 +80,7 @@ MainWindow::MainWindow(rclcpp::Node::SharedPtr node, QWidget *parent)
   style->main_window_ptr = this;
   vtk_widget_->renderWindow()->GetInteractor()->SetInteractorStyle(style);
 
-  // Create Box
+  // Target Box
   box_source_->SetXLength(1.0); box_source_->SetYLength(1.0); box_source_->SetZLength(1.0);
   box_source_->SetCenter(0.0, 0.0, 0.0);
   box_mapper_->SetInputConnection(box_source_->GetOutputPort());
@@ -82,7 +89,7 @@ MainWindow::MainWindow(rclcpp::Node::SharedPtr node, QWidget *parent)
   box_actor_->GetProperty()->SetOpacity(0.8);
   renderer_->AddActor(box_actor_);
 
-  // Create Floor
+  // Floor
   floor_source_->SetXLength(1.0); floor_source_->SetYLength(1.0); floor_source_->SetZLength(0.1);
   floor_source_->SetCenter(0.0, 0.0, 0.0);
   floor_mapper_->SetInputConnection(floor_source_->GetOutputPort());
@@ -117,7 +124,9 @@ void MainWindow::addSelectedPoint(double x, double y, double z)
     p.x = x; p.y = y; p.z = z;
     stored_points_.push_back(p);
 
-    // Create Visual Sphere
+    // Log 
+    RCLCPP_INFO(ros_node_->get_logger(), "Point Added. [%.3f, %.3f, %.3f] Total: %zu", x, y, z, stored_points_.size());
+
     vtkNew<vtkSphereSource> sphere;
     sphere->SetCenter(x, y, z);
     sphere->SetRadius(0.015);
@@ -137,7 +146,7 @@ void MainWindow::addSelectedPoint(double x, double y, double z)
     // Save the actor so we can delete it later!
     point_actors_.push_back(actor);
 
-RCLCPP_INFO(ros_node_->get_logger(), "Point Added. [%.3f, %.3f, %.3f] Total: %zu", x, y, z, stored_points_.size());    vtk_widget_->renderWindow()->Render();
+    vtk_widget_->renderWindow()->Render();
 }
 
 // --- deleteLastPoint ---
@@ -170,6 +179,49 @@ void MainWindow::deleteLastPoint()
     vtk_widget_->renderWindow()->Render();
 }
 
+// --- Save to JSON Function ---
+void MainWindow::savePointsToFile()
+{
+    if (stored_points_.empty()) {
+         RCLCPP_WARN(ros_node_->get_logger(), "No points to save!");
+         return;
+    }
+    // Get the current working directory of the node
+    // Use the QDir to handle paths safely
+    QDir workspaceDir(QDir::currentPath());
+    
+    // Create the 'data' subdirectory if it doesn't exist
+    if (!workspaceDir.exists("data")) {
+        workspaceDir.mkdir("data");
+    }
+    
+    // Construct the file path: /ur10/data/selected_points.json
+    QString fileName = workspaceDir.filePath("data/selected_points.json");
+
+    // Construct the JSON Array
+    QJsonArray pointsArray;
+    
+    for (const auto& p : stored_points_) {
+        QJsonObject pointObject;
+        pointObject["x"] = p.x;
+        pointObject["y"] = p.y;
+        pointObject["z"] = p.z;
+        pointsArray.append(pointObject);
+    }
+
+    // Write to File
+    QJsonDocument saveDoc(pointsArray);
+    QFile saveFile(fileName);
+    
+    if (!saveFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        RCLCPP_ERROR(ros_node_->get_logger(), "Could not open file for writing at: %s", fileName.toStdString().c_str());
+        return;
+    }
+
+    saveFile.write(saveDoc.toJson());
+    RCLCPP_INFO(ros_node_->get_logger(), "SUCCESS! Saved %zu points to: %s", stored_points_.size(), fileName.toStdString().c_str());
+    saveFile.close();
+}
 
 void MainWindow::topic_callback(const moveit_msgs::msg::CollisionObject::SharedPtr msg)
 {

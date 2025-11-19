@@ -10,7 +10,7 @@
 #include <vtkCubeSource.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkNew.h>
-#include <vtkSmartPointer.h> // For managing actor memory
+#include <vtkSmartPointer.h>
 #include <vtkRenderWindowInteractor.h>
 #include <vtkNamedColors.h>
 #include <vtkProperty.h>
@@ -20,6 +20,12 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QWidget>
+// --- Saving to JSON ---
+#include <QFileDialog> // For saving
+#include <QJsonDocument> // For JSON
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QFile>
 
 #include "rclcpp/rclcpp.hpp"
 #include "moveit_msgs/msg/collision_object.hpp"
@@ -39,7 +45,8 @@ public:
 private:
   // --- Qt GUI Elements ---
   QVTKOpenGLNativeWidget* vtk_widget_;
-  QPushButton* delete_button_; 
+  QPushButton* delete_button_;
+  QPushButton* save_button_; 
 
   // --- VTK Members ---
   vtkNew<vtkRenderer> renderer_;
@@ -57,9 +64,7 @@ private:
 
   // --- Point Storage ---
   std::vector<geometry_msgs::msg::Point> stored_points_;
-  
-  // We must store the actors so we can remove them later!
-  std::vector<vtkSmartPointer<vtkActor>> point_actors_; // <--- NEW
+  std::vector<vtkSmartPointer<vtkActor>> point_actors_;
 
   // --- ROS 2 Members ---
   rclcpp::Node::SharedPtr ros_node_;
@@ -86,7 +91,7 @@ private slots:
                       double dimX, double dimY, double dimZ,
                       double roll, double pitch, double yaw);
                       
-  // --- NEW SLOT ---
   void deleteLastPoint();
+  void savePointsToFile(); 
 };
 #endif
