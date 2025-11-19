@@ -38,6 +38,15 @@ ament_target_dependencies(
   geometry_msgs
 )
 
+add_executable(waypoint_validate src/validate_plan.cpp)
+ament_target_dependencies(
+  waypoint_validate
+  rclcpp
+  geometry_msgs
+  tf2
+  moveit_msgs
+)
+
 install(
   TARGETS lifecycle_planner
   DESTINATION lib/${PROJECT_NAME}
@@ -45,6 +54,11 @@ install(
 
 install(
   TARGETS waypoint_pub
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  TARGETS waypoint_validate
   DESTINATION lib/${PROJECT_NAME}
 )
 
