@@ -50,9 +50,12 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
             // which is how the regular node gets all the moveit parameters.
             auto node_options = this->get_node_options();
             moveit_node = std::make_shared<rclcpp::Node>("lifecycle_planner_moveit_node", node_options);
+            
+            auto wp_options = this->get_node_options();
+            wp_options.automatically_declare_parameters_from_overrides(false);
 
             // initialize waypoint publisher node
-            waypoint_publisher_node = std::make_shared<ur10_planner::WaypointPublisher>(node_options);
+            waypoint_publisher_node = std::make_shared<ur10_planner::WaypointPublisher>(wp_options);
 
             // add both nodes into a seperate thread
             executor_thread = std::thread([this]() {
@@ -129,6 +132,11 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
 
             trajectory_publisher->on_activate();
 
+            if(waypoint_publisher_node) {
+                RCLCPP_INFO(this->get_logger(), "Triggered one-time waypoint publisher ...");
+                this->waypoint_publisher_node->start_timer();
+            }
+
             return LCR::SUCCESS;
         };
 
@@ -184,7 +192,12 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
         void path_callback(const geometry_msgs::msg::PoseArray::SharedPtr msg) {
             // check if node is active
             if(this->get_current_state().id() != lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE) {
-                RCLCPP_WARN(this->get_logger(), "Path publisher not active, waiting ...");
+                RCLCPP_WARN_THROTTLE(
+                    this->get_logger(),
+                    *this->get_clock(),
+                    8000,
+                    "Path received but node is not active. Waiting for activation"
+                );
                 return;
             }
             
@@ -244,7 +257,21 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
 
                 // publish computed trajectory
                 trajectory_publisher->publish(trajectory);
+                
+                // execute plan **TESTING ONLY CHANGE AT LATER TIME**
                 RCLCPP_INFO(this->get_logger(), "Planning successful, trajectory published to /planned_trajectory");
+                
+                RCLCPP_INFO(this->get_logger(), "Executing plan for testing ...");
+                auto move_result = move_group->execute(trajectory);
+                
+                if (move_result == moveit::core::MoveItErrorCode::SUCCESS) {
+                    RCLCPP_INFO(this->get_logger(), "Plan execution successful");
+                } else {
+                    RCLCPP_ERROR(this->get_logger(), "Plan execution failes");
+                    response->success = false;
+                    response->message = "Failed to execute the planned path";
+                    return;
+                }
 
                 // clean up the path
                 this->received_waypoints.clear();
