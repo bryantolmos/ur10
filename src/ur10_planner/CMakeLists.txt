@@ -27,11 +27,12 @@ ament_target_dependencies(
   rclcpp
   geometry_msgs
   tf2
+  tf2_geometry_msgs
 )
 
 add_executable(lifecycle_planner 
   src/lifecycle_planner.cpp
-  )
+)
 
 target_link_libraries(lifecycle_planner ur10_planner_lib)
 
@@ -53,6 +54,11 @@ ament_target_dependencies(
 install(
   DIRECTORY include/
   DESTINATION include
+)
+
+install(
+  DIRECTORY config
+  DESTINATION share/${PROJECT_NAME}
 )
 
 install(
