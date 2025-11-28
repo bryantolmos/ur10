@@ -6,6 +6,7 @@
 #include <vtkCellPicker.h>
 #include <vtkSphereSource.h>
 #include <QDir>
+#include <QTextStream>
 
 // =========================================================
 // Custom Interactor Style Class
@@ -59,7 +60,7 @@ MainWindow::MainWindow(rclcpp::Node::SharedPtr node, QWidget *parent)
   delete_button_ = new QPushButton("Delete Last Point", central_widget);
   button_layout->addWidget(delete_button_);
   
-  save_button_ = new QPushButton("Save JSON", central_widget); // <--- NEW BUTTON
+  save_button_ = new QPushButton("Save YAML", central_widget); // <--- NEW BUTTON
   button_layout->addWidget(save_button_);
 
   layout->addLayout(button_layout);
@@ -179,7 +180,7 @@ void MainWindow::deleteLastPoint()
     vtk_widget_->renderWindow()->Render();
 }
 
-// --- Save to JSON Function ---
+// --- Save to YAML Function ---
 void MainWindow::savePointsToFile()
 {
     if (stored_points_.empty()) {
@@ -187,40 +188,37 @@ void MainWindow::savePointsToFile()
          return;
     }
     // Get the current working directory of the node
-    // Use the QDir to handle paths safely
     QDir workspaceDir(QDir::currentPath());
-    
-    // Create the 'data' subdirectory if it doesn't exist
+    // Create the data subdirectory if it doesn't exist
     if (!workspaceDir.exists("data")) {
         workspaceDir.mkdir("data");
     }
     
-    // Construct the file path: /ur10/data/selected_points.json
-    QString fileName = workspaceDir.filePath("data/selected_points.json");
+    // Construct the file path: /ur10/data/selected_points.yaml
+    QString fileName = workspaceDir.filePath("data/selected_points.yaml");
 
-    // Construct the JSON Array
-    QJsonArray pointsArray;
-    
-    for (const auto& p : stored_points_) {
-        QJsonObject pointObject;
-        pointObject["x"] = p.x;
-        pointObject["y"] = p.y;
-        pointObject["z"] = p.z;
-        pointsArray.append(pointObject);
-    }
-
-    // Write to File
-    QJsonDocument saveDoc(pointsArray);
-    QFile saveFile(fileName);
-    
-    if (!saveFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+  QFile saveFile(fileName);
+    if (!saveFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
         RCLCPP_ERROR(ros_node_->get_logger(), "Could not open file for writing at: %s", fileName.toStdString().c_str());
         return;
     }
 
-    saveFile.write(saveDoc.toJson());
-    RCLCPP_INFO(ros_node_->get_logger(), "SUCCESS! Saved %zu points to: %s", stored_points_.size(), fileName.toStdString().c_str());
+    // Write YAML Content
+    QTextStream out(&saveFile);
+    
+    // Header Comment
+    out << "# Selected Points from VTK Viewer\n";
+    out << "selected_points:\n"; // Root key
+
+    for (const auto& p : stored_points_) {
+        // YAML formatting
+        out << "  - x: " << p.x << "\n";
+        out << "    y: " << p.y << "\n";
+        out << "    z: " << p.z << "\n";
+    }
+
     saveFile.close();
+    RCLCPP_INFO(ros_node_->get_logger(), "SUCCESS! Saved %zu points to: %s", stored_points_.size(), fileName.toStdString().c_str());
 }
 
 void MainWindow::topic_callback(const moveit_msgs::msg::CollisionObject::SharedPtr msg)
