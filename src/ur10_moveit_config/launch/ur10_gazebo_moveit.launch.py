@@ -91,6 +91,9 @@ def generate_launch_description():
     )
 
     # Step 9: Launch lifecycle planner node
+    pkg_dir = get_package_share_directory('ur10_planner')
+    config_file = os.path.join(pkg_dir, 'config', 'weld_path.yaml')
+
     lifecycle_planner_node = Node(
         package="ur10_planner",
         executable="lifecycle_planner",
@@ -101,6 +104,7 @@ def generate_launch_description():
             moveit_config.to_dict(),
             {"use_sim_time": True},
         ],
+        arguments=['--ros-args', '--params-file', config_file]
     )
 
     return LaunchDescription([

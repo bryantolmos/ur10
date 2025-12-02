@@ -18,7 +18,24 @@ find_package(geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 
-add_executable(lifecycle_planner src/lifecycle_planner.cpp)
+add_library(ur10_planner_lib
+  src/waypoint_pub.cpp
+)
+
+ament_target_dependencies(
+  ur10_planner_lib
+  rclcpp
+  geometry_msgs
+  tf2
+  tf2_geometry_msgs
+)
+
+add_executable(lifecycle_planner 
+  src/lifecycle_planner.cpp
+)
+
+target_link_libraries(lifecycle_planner ur10_planner_lib)
+
 ament_target_dependencies(
   lifecycle_planner
   rclcpp
@@ -28,14 +45,10 @@ ament_target_dependencies(
   moveit_ros_planning_interface
   moveit_msgs
   moveit_visual_tools
-)
-
-add_executable(waypoint_pub src/waypoint_pub.cpp)
-ament_target_dependencies(
-  waypoint_pub
   tf2_geometry_msgs
   tf2
   geometry_msgs
+  std_srvs
 )
 
 add_executable(waypoint_validate src/validate_plan.cpp)
@@ -48,13 +61,20 @@ ament_target_dependencies(
 )
 
 install(
-  TARGETS lifecycle_planner
-  DESTINATION lib/${PROJECT_NAME}
+  DIRECTORY include/
+  DESTINATION include
 )
 
 install(
-  TARGETS waypoint_pub
-  DESTINATION lib/${PROJECT_NAME}
+  DIRECTORY config
+  DESTINATION share/${PROJECT_NAME}
+)
+
+install(
+  TARGETS lifecycle_planner ur10_planner_lib
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
 install(
