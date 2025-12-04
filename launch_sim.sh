@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 1. Define the workspace directory, change accordingly
-WS_DIR=~/ws
+WS_DIR=~/ur10
 
 # 2. Source the base ROS 2 Jazzy installation
 source /opt/ros/jazzy/setup.bash
