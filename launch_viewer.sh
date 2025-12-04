@@ -49,4 +49,4 @@ export LD_LIBRARY_PATH=$JAVA_LIB_PATH:$JAVA_LIB_PATH/server:$LD_LIBRARY_PATH
 
 QT_QPA_PLATFORM=xcb \
 WAYLAND_DISPLAY= \
-ros2 run vtk_viewer vtk_node
+ros2 launch vtk_viewer vtk_viewer.launch.py
