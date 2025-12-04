@@ -31,4 +31,11 @@ echo "Starting VTK Viewer..."
 # This is for Java 21, adjust if using a different version, remove the hastag to use
 #LD_LIBRARY_PATH=/usr/lib/jvm/java-21-openjdk-amd64/lib:/usr/lib/jvm/java-21-openjdk-amd64/lib/server:$LD_LIBRARY_PATH ros2 run vtk_viewer vtk_node
 
-ros2 run vtk_viewer vtk_node
+# This fixed the "GLEW could not be initialized" error - Jesus
+# Forced machine to use Xwayland backend instead of default Wayland, not sure why this is the way it is but it works
+QT_QPA_PLATFORM=xcb \
+WAYLAND_DISPLAY= \
+LD_LIBRARY_PATH=/usr/lib/jvm/java-21-openjdk-amd64/lib:/usr/lib/jvm/java-21-openjdk-amd64/lib/server:$LD_LIBRARY_PATH \
+  ros2 run vtk_viewer vtk_node
+
+#ros2 run vtk_viewer vtk_node

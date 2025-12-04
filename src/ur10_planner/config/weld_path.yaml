@@ -1,0 +1,14 @@
+/**:
+  ros__parameters:
+    
+    # --- weave settings ---
+    weave_amplitude: 0.01
+    weave_step_length: 0.01
+
+    # --- main path to follow ---
+    main_path_flat: [
+      -0.8,  0.4, 0.5, 0.0, 3.14159, 0.0,
+      -0.8, -0.0, 0.5, 0.0, 3.14159, 0.0,
+      -0.4, 0.1, 0.5, 0.0, 3.14159, 0.0,
+      -0.8,  0.4, 0.5, 0.0, 3.14159, 0.0
+    ]
