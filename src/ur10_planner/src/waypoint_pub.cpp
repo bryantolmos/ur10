@@ -284,17 +284,17 @@ void WaypointPublisher::print_pose_array(const geometry_msgs::msg::PoseArray & p
 
 }  // namespace ur10_planner
 
-int main(int argc, char ** argv)
-{
-  rclcpp::init(argc, argv);
-
-  rclcpp::NodeOptions options;
-  auto node = std::make_shared<ur10_planner::WaypointPublisher>(options, "waypoint_publisher");
-
-  // For now, just trigger publishing once at startup.
-  node->start_timer();
-
-  rclcpp::spin(node);
-  rclcpp::shutdown();
-  return 0;
-}
+//int main(int argc, char ** argv)
+//{
+//  rclcpp::init(argc, argv);
+//
+//  rclcpp::NodeOptions options;
+//  auto node = std::make_shared<ur10_planner::WaypointPublisher>(options, "waypoint_publisher");
+//
+//  // For now, just trigger publishing once at startup.
+//  node->start_timer();
+//
+//  rclcpp::spin(node);
+//  rclcpp::shutdown();
+//  return 0;
+//}
