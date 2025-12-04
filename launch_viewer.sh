@@ -38,4 +38,4 @@ WAYLAND_DISPLAY= \
 LD_LIBRARY_PATH=/usr/lib/jvm/java-21-openjdk-amd64/lib:/usr/lib/jvm/java-21-openjdk-amd64/lib/server:$LD_LIBRARY_PATH \
   ros2 run vtk_viewer vtk_node
 
-ros2 run vtk_viewer vtk_node
+#ros2 run vtk_viewer vtk_node
