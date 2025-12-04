@@ -9,7 +9,11 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(moveit_msgs REQUIRED)
-
+find_package(moveit_core REQUIRED)
+find_package(moveit_ros_planning_interface REQUIRED)
+find_package(geometric_shapes REQUIRED)
+find_package(ament_index_cpp REQUIRED)
+find_package(tf2_eigen REQUIRED)
 
 # Find Qt6
 # This enables AUTOMOC, AUTOUIC, AUTORCC
@@ -27,7 +31,15 @@ find_package(VTK REQUIRED)
 add_executable(vtk_node src/main.cpp src/mainwindow.cpp)
 
 # Link all the libraries
-ament_target_dependencies(vtk_node rclcpp moveit_msgs)
+ament_target_dependencies(vtk_node 
+rclcpp 
+moveit_msgs
+moveit_core
+moveit_ros_planning_interface
+geometric_shapes
+ament_index_cpp
+tf2_eigen
+)
 
 # Link Qt6 and VTK (using the "plain" signature)
 target_link_libraries(vtk_node
@@ -38,6 +50,10 @@ target_link_libraries(vtk_node
 # Install our executable
 install(TARGETS vtk_node DESTINATION lib/${PROJECT_NAME})
 
+install(
+  DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}  
+)
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
