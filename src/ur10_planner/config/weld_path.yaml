@@ -5,7 +5,7 @@
     weave_step_length: 0.01
 
     # change accordingly, file path will be different on your end
-    points_file_path: "/home/bryant/ur10/data/selected_points.yaml"
+    points_file_path: /home/jesushdzzzz/ur10/data/selected_points.yaml
 
     # Default orientation for points loaded from file
     default_roll: 0.0

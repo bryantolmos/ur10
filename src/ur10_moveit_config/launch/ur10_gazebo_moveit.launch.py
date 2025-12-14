@@ -46,7 +46,7 @@ def generate_launch_description():
         executable="robot_state_publisher",
         name="robot_state_publisher",
         output="screen",
-        parameters=[moveit_config.robot_description, {"use_sim_time": True}],
+        parameters=[moveit_config.robot_description, {"use_sim_time": False}],
     )
 
     # Step 5: Start the ros2_control spawner nodes
@@ -68,7 +68,7 @@ def generate_launch_description():
         output="screen",
         parameters=[
             moveit_config.to_dict(),
-            {"use_sim_time": True}, 
+            {"use_sim_time": False}, 
         ],
         arguments=["--ros-args", "--log-level", "info"],
     )
@@ -102,7 +102,7 @@ def generate_launch_description():
         emulate_tty=True,
         parameters=[
             moveit_config.to_dict(),
-            {"use_sim_time": True},
+            {"use_sim_time": False},
         ],
         arguments=['--ros-args', '--params-file', config_file]
     )
