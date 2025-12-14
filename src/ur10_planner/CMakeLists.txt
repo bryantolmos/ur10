@@ -17,6 +17,7 @@ find_package(moveit_visual_tools REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 add_library(ur10_planner_lib
   src/waypoint_pub.cpp
@@ -29,6 +30,8 @@ ament_target_dependencies(
   tf2
   tf2_geometry_msgs
 )
+
+target_link_libraries(ur10_planner_lib yaml-cpp)
 
 add_executable(lifecycle_planner 
   src/lifecycle_planner.cpp

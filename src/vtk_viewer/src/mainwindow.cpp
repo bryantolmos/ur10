@@ -9,6 +9,9 @@
 #include <QTextStream>
 #include <geometric_shapes/shapes.h>
 
+#include <vtkTransform.h>
+#include <vtkTransformPolyDataFilter.h>
+
 // =========================================================
 // Custom Interactor Style Class
 // Handles Shift + Click for picking points
@@ -321,7 +324,9 @@ void MainWindow::setupRobot() {
 
     const std::string& link_name = link->getName();
     auto shape = link->getShapes()[0]; 
-
+    
+    const Eigen::Isometry3d& visual_offset = link->getVisualMeshOrigin();
+    
     if (shape->type == shapes::MESH) {
       std::string mesh_path = link->getVisualMeshFilename();
       if (mesh_path.empty()) continue;
@@ -340,8 +345,23 @@ void MainWindow::setupRobot() {
       vtkSmartPointer<vtkPolyData> vtk_mesh = meshToVtk(loaded_mesh);
       delete loaded_mesh;
 
+      vtkNew<vtkMatrix4x4> offset_mat;
+      for(int r=0; r<4; r++) {
+        for(int c=0; c<4; c++) {
+          offset_mat->SetElement(r, c, visual_offset(r,c));
+        }
+      }
+
+      vtkNew<vtkTransform> transform;
+      transform->SetMatrix(offset_mat);
+
+      vtkNew<vtkTransformPolyDataFilter> transform_filter;
+      transform_filter->SetInputData(vtk_mesh);
+      transform_filter->SetTransform(transform);
+      transform_filter->Update();
+
       vtkNew<vtkPolyDataMapper> mapper;
-      mapper->SetInputData(vtk_mesh);
+      mapper->SetInputData(transform_filter->GetOutput());
 
       vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
       actor->SetMapper(mapper);

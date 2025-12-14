@@ -3,6 +3,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <chrono>
 #include <cmath>
+#include <fstream>
 
 namespace ur10_planner
 {
@@ -21,38 +22,84 @@ WaypointPublisher::WaypointPublisher(const rclcpp::NodeOptions & options,
   this->declare_parameter<double>("default_pitch", 0.0);  // rad
   this->declare_parameter<double>("default_yaw", 0.0);    // rad
 
-  // Two possible input styles:
-  // 1) main_path_flat: [x, y, z, roll, pitch, yaw, ...] full pose from Bryant's implementation, we might go with this one since it's more complete
-  this->declare_parameter<std::vector<double>>(
-      "main_path_flat", std::vector<double>{});
+  // Default to empty. If set, it overrides manual params.
+  this->declare_parameter<std::string>("points_file_path", ""); 
 
-  // 2) selected_points: [x1, y1, z1, x2, y2, z2, ...] positions only from Luis' selected_points.yaml coming straight from the GUI
-  this->declare_parameter<std::vector<double>>(
-      "selected_points", std::vector<double>{});
+  // Legacy params (keep them as fallback)
+  this->declare_parameter<std::vector<double>>("main_path_flat", std::vector<double>{});
+  this->declare_parameter<std::vector<double>>("selected_points", std::vector<double>{});
 
-  // Publisher on /welding_path with latched QoS to allow late subscribers
-  auto qos = rclcpp::QoS(rclcpp::KeepLast(1))
-                  .transient_local()   // latched
-                  .reliable();
-
+  auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable();
   publisher_ = this->create_publisher<geometry_msgs::msg::PoseArray>("/welding_path", qos);
 
-  RCLCPP_INFO(this->get_logger(),
-              "WaypointPublisher started. Will publish PoseArray with weave on /welding_path.");
+  RCLCPP_INFO(this->get_logger(), "WaypointPublisher initialized.");
 }
 
 void WaypointPublisher::start_timer()
 {
   RCLCPP_INFO(this->get_logger(), "Activating waypoint publisher timer");
 
-  if (!timer_) {
-    timer_ = this->create_wall_timer(
+  // allow re-triggering eg clicling 'plan' multiple times
+  if (timer_) {
+      timer_->cancel();
+  }
+  timer_ = this->create_wall_timer(
       std::chrono::milliseconds(100),
       std::bind(&WaypointPublisher::publish_waypoints, this));
-  } else {
-    RCLCPP_WARN(this->get_logger(), "Timer already active.");
-  }
 }
+
+// parse yaml
+bool WaypointPublisher::load_from_yaml_file(const std::string& path) {
+    std::ifstream fin(path);
+    if (!fin.fail()) {
+        RCLCPP_INFO(this->get_logger(), "Reading points from file: %s", path.c_str());
+    } else {
+        RCLCPP_ERROR(this->get_logger(), "File not found: %s", path.c_str());
+        return false;
+    }
+
+    try {
+        YAML::Node config = YAML::LoadFile(path);
+
+        // Check if root node "selected_points" exists
+        if (!config["selected_points"]) {
+            RCLCPP_ERROR(this->get_logger(), "YAML file missing 'selected_points' key.");
+            return false;
+        }
+
+        // Prepare default orientation
+        tf2::Quaternion q_default;
+        q_default.setRPY(default_roll_, default_pitch_, default_yaw_);
+        geometry_msgs::msg::Quaternion q_msg_default = tf2::toMsg(q_default);
+
+        // Clear existing
+        main_path_waypoints_.clear();
+
+        const YAML::Node& points = config["selected_points"];
+        for (std::size_t i = 0; i < points.size(); ++i) {
+            geometry_msgs::msg::Pose p;
+            
+            // Read x, y, z from the map
+            p.position.x = points[i]["x"].as<double>();
+            p.position.y = points[i]["y"].as<double>();
+            p.position.z = points[i]["z"].as<double>();
+            
+            // Apply default orientation
+            p.orientation = q_msg_default;
+
+            main_path_waypoints_.push_back(p);
+        }
+        
+        RCLCPP_INFO(this->get_logger(), "Successfully loaded %zu points from YAML.", main_path_waypoints_.size());
+        return true;
+
+    } catch (const YAML::Exception& e) {
+        RCLCPP_ERROR(this->get_logger(), "YAML Parsing Error: %s", e.what());
+        return false;
+    }
+}
+
+
 
 // Parameter loading
 bool WaypointPublisher::load_parameters() {
@@ -67,11 +114,25 @@ bool WaypointPublisher::load_parameters() {
     return false;
   }
 
+
   // Frame and default orientation
   this->get_parameter("frame_id", frame_id_);
   this->get_parameter("default_roll", default_roll_);
   this->get_parameter("default_pitch", default_pitch_);
   this->get_parameter("default_yaw", default_yaw_);
+
+  // get file path
+  this->get_parameter("points_file_path", points_file_path_);
+
+  if (!points_file_path_.empty()) {
+    if (load_from_yaml_file(points_file_path_)) {
+      if (main_path_waypoints_.size() < 2) {
+        RCLCPP_ERROR(this->get_logger(), "Path file had fewer than 2 points.");
+        return false;
+      }
+      return true;
+    }
+  }
 
   // Input options
   std::vector<double> main_path_flat;

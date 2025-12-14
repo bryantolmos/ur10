@@ -229,8 +229,35 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
 
                 RCLCPP_INFO(this->get_logger(), "Planning service called with %zu waypoints", this->received_waypoints.size());
 
+                // APPROACH PHASE
+                // move the robot from wherever it is currently to the first waypoint of the path
+
+                RCLCPP_INFO(this->get_logger(), "Planning approach to start position");
+
+                move_group->setPoseTarget(this->received_waypoints[0]);
+                
+                //move_group->setPlanningTime(10.0);
+                // slow down for approach
+                move_group->setMaxVelocityScalingFactor(0.1); 
+                move_group->setMaxAccelerationScalingFactor(0.1);
+
+                // execute the move until robot reacher the start
+                moveit::core::MoveItErrorCode approach_result = move_group->move();
+
+                if (approach_result != moveit::core::MoveItErrorCode::SUCCESS) {
+                    RCLCPP_ERROR(this->get_logger(), "Failed to move to the Start Position! Aborting.");
+                    response->success = false;
+                    response->message = "Failed to approach start position";
+                    return;
+                }
+                
+                RCLCPP_INFO(this->get_logger(), "Robot is at start position.");
+
                 // create trajectory object then compute cartesian path
                 moveit_msgs::msg::RobotTrajectory trajectory;
+
+                move_group->setMaxVelocityScalingFactor(0.1); 
+                move_group->setMaxAccelerationScalingFactor(0.1);
 
                 double fraction = move_group->computeCartesianPath(
                     this->received_waypoints, // input path to follow
@@ -240,7 +267,7 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
 
                 RCLCPP_INFO(this->get_logger(), "Cartesian path (%.2f%%) achieved", fraction * 100);
 
-                if (fraction < 0.97) {
+                if (fraction < 0.90) {
                     RCLCPP_ERROR(this->get_logger(), "Failed to compute full Cartesian path");
                     response->success = false;
                     response->message = "Failed to compute full cartesian path";
@@ -261,11 +288,12 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
                 // execute plan **TESTING ONLY CHANGE AT LATER TIME**
                 RCLCPP_INFO(this->get_logger(), "Planning successful, trajectory published to /planned_trajectory");
                 
-                RCLCPP_INFO(this->get_logger(), "Executing plan for testing ...");
                 auto move_result = move_group->execute(trajectory);
                 
                 if (move_result == moveit::core::MoveItErrorCode::SUCCESS) {
                     RCLCPP_INFO(this->get_logger(), "Plan execution successful");
+                    response->success = true;
+                    response->message = "plan executed successfully";
                 } else {
                     RCLCPP_ERROR(this->get_logger(), "Plan execution failes");
                     response->success = false;
@@ -275,9 +303,6 @@ class lifecycle_planner : public rclcpp_lifecycle::LifecycleNode {
 
                 // clean up the path
                 this->received_waypoints.clear();
-
-                response->success = true;
-                response->message = "Plan published for validation";
             }
 
         // configuration variables

@@ -1,14 +1,13 @@
 /**:
   ros__parameters:
-    
     # --- weave settings ---
     weave_amplitude: 0.01
     weave_step_length: 0.01
 
-    # --- main path to follow ---
-    main_path_flat: [
-      -0.8,  0.4, 0.5, 0.0, 3.14159, 0.0,
-      -0.8, -0.0, 0.5, 0.0, 3.14159, 0.0,
-      -0.4, 0.1, 0.5, 0.0, 3.14159, 0.0,
-      -0.8,  0.4, 0.5, 0.0, 3.14159, 0.0
-    ]
+    # change accordingly, file path will be different on your end
+    points_file_path: "/home/bryant/ur10/data/selected_points.yaml"
+
+    # Default orientation for points loaded from file
+    default_roll: 0.0
+    default_pitch: 3.14159 # Point Down
+    default_yaw: 0.0

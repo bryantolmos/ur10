@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 
+#include <yaml-cpp/yaml.h>
+
 namespace ur10_planner
 {
 
@@ -27,6 +29,8 @@ private:
     // Core logic
     void publish_waypoints();
     bool load_parameters();
+    bool load_from_yaml_file(const std::string& path);
+
     void add_weave_segment(
         geometry_msgs::msg::PoseArray & msg,
         const geometry_msgs::msg::Pose & pose_a,
@@ -47,6 +51,9 @@ private:
     double weave_step_length_ = 0.01;
 
     std::string frame_id_{"base_link"};
+
+    std::string points_file_path_;
+
     double default_roll_  = 0.0;  // radians
     double default_pitch_ = 0.0;  // radians
     double default_yaw_   = 0.0;  // radians
