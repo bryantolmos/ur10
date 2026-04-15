@@ -46,7 +46,8 @@ def generate_launch_description():
         executable="robot_state_publisher",
         name="robot_state_publisher",
         output="screen",
-        parameters=[moveit_config.robot_description, {"use_sim_time": False}],
+        # Note: If physics act weird in Gazebo, you may need to change use_sim_time to True
+        parameters=[moveit_config.robot_description, {"use_sim_time": True}],
     )
 
     # Step 5: Start the ros2_control spawner nodes
@@ -68,7 +69,7 @@ def generate_launch_description():
         output="screen",
         parameters=[
             moveit_config.to_dict(),
-            {"use_sim_time": False}, 
+            {"use_sim_time": True}, 
         ],
         arguments=["--ros-args", "--log-level", "info"],
     )
@@ -90,23 +91,6 @@ def generate_launch_description():
         ],
     )
 
-    # Step 9: Launch lifecycle planner node
-    pkg_dir = get_package_share_directory('ur10_planner')
-    config_file = os.path.join(pkg_dir, 'config', 'weld_path.yaml')
-
-    lifecycle_planner_node = Node(
-        package="ur10_planner",
-        executable="lifecycle_planner",
-        name="lifecycle_planner",
-        output="screen",
-        emulate_tty=True,
-        parameters=[
-            moveit_config.to_dict(),
-            {"use_sim_time": False},
-        ],
-        arguments=['--ros-args', '--params-file', config_file]
-    )
-
     return LaunchDescription([
         gazebo,
         clock_bridge,
@@ -115,5 +99,4 @@ def generate_launch_description():
         spawn_controllers,
         move_group_node,
         rviz_node,
-        lifecycle_planner_node,
     ])
