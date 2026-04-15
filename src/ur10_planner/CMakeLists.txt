@@ -5,67 +5,33 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(rclcpp_lifecycle REQUIRED)
-find_package(std_msgs REQUIRED)
-find_package(moveit_ros_move_group REQUIRED)
-find_package(moveit_ros_planning_interface REQUIRED)
-find_package(moveit_msgs REQUIRED)
-find_package(moveit_visual_tools REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(moveit_msgs REQUIRED)
+find_package(moveit_ros_planning_interface REQUIRED)
+find_package(moveit_visual_tools REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
-add_library(ur10_planner_lib
-  src/waypoint_pub.cpp
+# 1. Path Generator Node
+add_executable(path_generator_node src/path_generator_node.cpp)
+ament_target_dependencies(path_generator_node 
+  rclcpp geometry_msgs tf2 tf2_geometry_msgs
+)
+target_link_libraries(path_generator_node yaml-cpp)
+
+# 2. Trajectory Supervisor Node
+add_executable(trajectory_supervisor_node src/trajectory_supervisor_node.cpp)
+ament_target_dependencies(trajectory_supervisor_node 
+  rclcpp geometry_msgs moveit_msgs moveit_ros_planning_interface moveit_visual_tools
 )
 
-ament_target_dependencies(
-  ur10_planner_lib
-  rclcpp
-  geometry_msgs
-  tf2
-  tf2_geometry_msgs
-)
-
-target_link_libraries(ur10_planner_lib yaml-cpp)
-
-add_executable(lifecycle_planner 
-  src/lifecycle_planner.cpp
-)
-
-target_link_libraries(lifecycle_planner ur10_planner_lib)
-
-ament_target_dependencies(
-  lifecycle_planner
-  rclcpp
-  rclcpp_lifecycle
-  std_msgs
-  moveit_ros_move_group
-  moveit_ros_planning_interface
-  moveit_msgs
-  moveit_visual_tools
-  tf2_geometry_msgs
-  tf2
-  geometry_msgs
-  std_srvs
-)
-
-add_executable(waypoint_validate src/validate_plan.cpp)
-ament_target_dependencies(
-  waypoint_validate
-  rclcpp
-  geometry_msgs
-  tf2
-  moveit_msgs
-)
-
-install(
-  DIRECTORY include/
-  DESTINATION include
+# 3. Safety Validator Node
+add_executable(safety_validator_node src/safety_validator_node.cpp)
+ament_target_dependencies(safety_validator_node 
+  rclcpp moveit_msgs
 )
 
 install(
@@ -74,27 +40,16 @@ install(
 )
 
 install(
-  TARGETS lifecycle_planner ur10_planner_lib
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION lib/${PROJECT_NAME}
-)
-
-install(
-  TARGETS waypoint_validate
+  TARGETS 
+    path_generator_node
+    trajectory_supervisor_node
+    safety_validator_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
-if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # comment the line when a copyright and license is added to all source files
-  set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
-  set(ament_cmake_cpplint_FOUND TRUE)
-  ament_lint_auto_find_test_dependencies()
-endif()
+install(
+  DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
 
 ament_package()
