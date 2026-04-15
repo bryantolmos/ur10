@@ -98,5 +98,5 @@ def generate_launch_description():
         spawn_entity,
         spawn_controllers,
         move_group_node,
-        rviz_node,
+        #rviz_node,
     ])

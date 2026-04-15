@@ -12,7 +12,7 @@ def generate_launch_description():
         'weld_path.yaml'
     )
 
-    # 2. Build the MoveIt parameters for the Supervisor
+    # 2. Build the MoveIt parameters for the Supervisor with Pilz pipeline
     moveit_config = (
         MoveItConfigsBuilder("ur10_with_custom_ee", package_name="ur10_moveit_config")
         .robot_description(
@@ -25,13 +25,25 @@ def generate_launch_description():
             mappings={"use_gazebo": "true"},
         )
         .robot_description_semantic(file_path="config/ur10_with_custom_ee.srdf")
-        .planning_pipelines(pipelines=["ompl"])
+        .robot_description_kinematics(file_path="config/kinematics.yaml")
+        .joint_limits(file_path="config/joint_limits.yaml")
+        .planning_pipelines(
+            pipelines=["pilz_industrial_motion_planner"],
+            default_planning_pipeline="pilz_industrial_motion_planner"
+        )
+        .trajectory_execution(file_path="config/moveit_controllers.yaml")
+        .pilz_cartesian_limits(file_path="config/pilz_cartesian_limits.yaml")
         .to_moveit_configs()
     )
 
-    # Combine MoveIt dict with our custom parameter
+    # Combine MoveIt dict with our custom parameters
     supervisor_params = moveit_config.to_dict()
-    supervisor_params.update({'enable_rviz': True, 'use_sim_time': True})
+    supervisor_params.update({
+        'enable_rviz': False,        # Publish trajectory visualization
+        'use_sim_time': True,
+        'planning_group': 'arm',
+        'ee_link_name': 'custom_tcp_link'
+    })
 
     # 3. Define the Nodes
     path_generator = Node(
