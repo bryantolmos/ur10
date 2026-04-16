@@ -1,46 +1,50 @@
 #include <rclcpp/rclcpp.hpp>
 #include <moveit_msgs/msg/robot_trajectory.hpp>
+#include <std_msgs/msg/bool.hpp>
 
 class SafetyValidatorNode : public rclcpp::Node {
-public: 
-    SafetyValidatorNode() : Node("safety_validator_node") {
+public:
+    SafetyValidatorNode(const rclcpp::NodeOptions& options) 
+    : Node("safety_validator", options) {
+        
         sub_ = this->create_subscription<moveit_msgs::msg::RobotTrajectory>(
             "/planned_trajectory", 10,
-            std::bind(&SafetyValidatorNode::trajectory_callback, this, std::placeholders::_1)
-        );
-        RCLCPP_INFO(this->get_logger(), "Safety Validator online. Monitoring /planned_trajectory...");
+            std::bind(&SafetyValidatorNode::trajectory_callback, this, std::placeholders::_1));
+            
+        pub_ = this->create_publisher<std_msgs::msg::Bool>("/trajectory_approval", 10);
+        RCLCPP_INFO(this->get_logger(), "Safety Validator ARMED. Acting as Gatekeeper.");
     }
 
 private:
     void trajectory_callback(const moveit_msgs::msg::RobotTrajectory::SharedPtr msg) {
-        RCLCPP_INFO(this->get_logger(), "Validating trajectory with %zu points...", msg->joint_trajectory.points.size());
-        
-        bool valid = true;
-        for (size_t i = 0; i < msg->joint_trajectory.points.size(); ++i) {
-            const auto& point = msg->joint_trajectory.points[i];
-            
-            for (size_t j = 0; j < point.positions.size(); ++j) {
-                // Heuristic limits: standard UR10 joint limits approach +/- 2*PI
-                if (point.positions[j] < -6.28 || point.positions[j] > 6.28) { 
-                    RCLCPP_WARN(this->get_logger(), "Unsafe joint limit detected on point %zu, joint %zu: %.2f", i, j, point.positions[j]);
-                    valid = false;
-                }
+        bool is_safe = true;
+
+        // Strict Check: Ensure no joint exceeds UR10 physical limits (-2π to 2π)
+        for (const auto& point : msg->joint_trajectory.points) {
+            for (double pos : point.positions) {
+                if (pos < -6.28 || pos > 6.28) is_safe = false;
             }
         }
 
-        if (valid) {
-            RCLCPP_INFO(this->get_logger(), "Trajectory passed safety constraints.");
+        std_msgs::msg::Bool approval_msg;
+        approval_msg.data = is_safe;
+        pub_->publish(approval_msg);
+
+        if (is_safe) {
+            RCLCPP_INFO(this->get_logger(), "Trajectory VALIDATED. Passing control back to Supervisor.");
         } else {
-            RCLCPP_ERROR(this->get_logger(), "Trajectory is UNSAFE. (Note: Interlock not yet wired to Supervisor)");
+            RCLCPP_ERROR(this->get_logger(), "EMERGENCY: Trajectory violates joint limits! REJECTED.");
         }
     }
 
     rclcpp::Subscription<moveit_msgs::msg::RobotTrajectory>::SharedPtr sub_;
+    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pub_;
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<SafetyValidatorNode>());
+    auto options = rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true);
+    rclcpp::spin(std::make_shared<SafetyValidatorNode>(options));
     rclcpp::shutdown();
     return 0;
 }
