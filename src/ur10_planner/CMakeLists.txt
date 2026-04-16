@@ -5,96 +5,59 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(std_msgs REQUIRED)
-find_package(moveit_ros_move_group REQUIRED)
-find_package(moveit_ros_planning_interface REQUIRED)
-find_package(moveit_msgs REQUIRED)
-find_package(moveit_visual_tools REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(moveit_msgs REQUIRED)
+find_package(moveit_ros_planning_interface REQUIRED)
+find_package(moveit_visual_tools REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(behaviortree_cpp REQUIRED)
+find_package(behaviortree_ros2 REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+find_package(std_srvs REQUIRED) 
 
-add_library(ur10_planner_lib
-  src/waypoint_pub.cpp
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "action/Weld.action"
 )
 
-ament_target_dependencies(
-  ur10_planner_lib
-  rclcpp
-  geometry_msgs
-  tf2
-  tf2_geometry_msgs
+# 1. Path Generator Node
+add_executable(path_generator_node src/path_generator_node.cpp)
+ament_target_dependencies(path_generator_node rclcpp geometry_msgs tf2 tf2_geometry_msgs std_srvs)
+target_link_libraries(path_generator_node yaml-cpp)
+
+# 2. Trajectory Supervisor Node
+add_executable(trajectory_supervisor_node src/trajectory_supervisor_node.cpp)
+ament_target_dependencies(trajectory_supervisor_node 
+  rclcpp rclcpp_action rclcpp_lifecycle std_msgs geometry_msgs moveit_msgs 
+  moveit_ros_planning_interface moveit_visual_tools
 )
+rosidl_get_typesupport_target(cpp_typesupport_target "${PROJECT_NAME}" "rosidl_typesupport_cpp")
+target_link_libraries(trajectory_supervisor_node "${cpp_typesupport_target}")
 
-target_link_libraries(ur10_planner_lib yaml-cpp)
+# 3. Safety Validator Node
+add_executable(safety_validator_node src/safety_validator_node.cpp)
+ament_target_dependencies(safety_validator_node rclcpp std_msgs moveit_msgs)
 
-add_executable(lifecycle_planner 
-  src/lifecycle_planner.cpp
-)
-
-target_link_libraries(lifecycle_planner ur10_planner_lib)
-
-ament_target_dependencies(
-  lifecycle_planner
-  rclcpp
-  rclcpp_lifecycle
-  std_msgs
-  moveit_ros_move_group
-  moveit_ros_planning_interface
-  moveit_msgs
-  moveit_visual_tools
-  tf2_geometry_msgs
-  tf2
-  geometry_msgs
-  std_srvs
-)
-
-add_executable(waypoint_validate src/validate_plan.cpp)
-ament_target_dependencies(
-  waypoint_validate
-  rclcpp
-  geometry_msgs
-  tf2
-  moveit_msgs
-)
+# 4. Behavior Tree Orchestrator Node
+add_executable(bt_weld_orchestrator_node src/bt_weld_orchestrator_node.cpp)
+ament_target_dependencies(bt_weld_orchestrator_node rclcpp rclcpp_action geometry_msgs moveit_msgs behaviortree_cpp behaviortree_ros2 std_srvs)
+rosidl_get_typesupport_target(cpp_typesupport_target_bt "${PROJECT_NAME}" "rosidl_typesupport_cpp")
+target_link_libraries(bt_weld_orchestrator_node "${cpp_typesupport_target_bt}")
 
 install(
-  DIRECTORY include/
-  DESTINATION include
-)
-
-install(
-  DIRECTORY config
+  DIRECTORY config launch action
   DESTINATION share/${PROJECT_NAME}
 )
 
 install(
-  TARGETS lifecycle_planner ur10_planner_lib
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION lib/${PROJECT_NAME}
-)
-
-install(
-  TARGETS waypoint_validate
+  TARGETS path_generator_node trajectory_supervisor_node safety_validator_node bt_weld_orchestrator_node
   DESTINATION lib/${PROJECT_NAME}
 )
-
-if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # comment the line when a copyright and license is added to all source files
-  set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
-  set(ament_cmake_cpplint_FOUND TRUE)
-  ament_lint_auto_find_test_dependencies()
-endif()
 
 ament_package()
